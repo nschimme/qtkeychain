@@ -82,9 +82,8 @@ QT_WRAP_CPP(qtkeychain_MOC_OUTFILES keychain.h keychain_p.h gnomekeyring_p.h)
 add_library(${QTKEYCHAIN_TARGET_NAME} ${qtkeychain_SOURCES} ${qtkeychain_MOC_OUTFILES} ${qtkeychain_QM_FILES})
 
 if(EMSCRIPTEN)
-    # The WebAssembly backend uses async JavaScript APIs, which requires Asyncify.
-    # Qt's Wasm support also uses Embind for C++/JS interaction.
-    target_link_options(${QTKEYCHAIN_TARGET_NAME} PRIVATE "-sASYNCIFY" "--bind")
+    # Qt's Wasm support uses Embind for C++/JS interaction.
+    target_link_options(${QTKEYCHAIN_TARGET_NAME} PRIVATE "--bind")
 endif()
 
 if(WIN32)
