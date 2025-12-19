@@ -45,7 +45,7 @@ namespace {
 
 // These EM_JS functions define the JavaScript side of the bridge.
 // They call the C++ functions above upon promise resolution.
-EM_JS(void, read_password, (JobPrivate* job, const char* key), {
+EM_JS(void, read_password, (JobPrivate* job, const char* key, int entryNotFound, int otherError), {
     const keyStr = UTF8ToString(key);
     navigator.credentials.get({
         password: true,
@@ -58,20 +58,18 @@ EM_JS(void, read_password, (JobPrivate* job, const char* key), {
             _qtkeychain_read_password_success(job, buffer, password.length);
             Module._free(buffer);
         } else {
-            // EntryNotFound is 1
-            _qtkeychain_read_password_error(job, 1, "Password entry not found");
+            _qtkeychain_read_password_error(job, entryNotFound, "Password entry not found");
         }
     }).catch(e => {
-        // OtherError is 6
         const errorStr = e.toString();
         const buffer = Module._malloc(errorStr.length + 1);
         Module.stringToUTF8(errorStr, buffer, errorStr.length + 1);
-        _qtkeychain_read_password_error(job, 6, buffer);
+        _qtkeychain_read_password_error(job, otherError, buffer);
         Module._free(buffer);
     });
 });
 
-EM_JS(void, write_password, (JobPrivate* job, const char* key, const char* data), {
+EM_JS(void, write_password, (JobPrivate* job, const char* key, const char* data, int otherError), {
     const credential = {
         id: UTF8ToString(key),
         password: UTF8ToString(data),
@@ -81,11 +79,10 @@ EM_JS(void, write_password, (JobPrivate* job, const char* key, const char* data)
     .then(() => {
         _qtkeychain_write_password_success(job);
     }).catch(e => {
-        // OtherError is 6
         const errorStr = e.toString();
         const buffer = Module._malloc(errorStr.length + 1);
         Module.stringToUTF8(errorStr, buffer, errorStr.length + 1);
-        _qtkeychain_write_password_error(job, 6, buffer);
+        _qtkeychain_write_password_error(job, otherError, buffer);
         Module._free(buffer);
     });
 });
@@ -99,12 +96,12 @@ EM_JS(bool, is_credentials_api_available, (), {
 // scheduledStart implementations just kick off the JavaScript operations.
 void ReadPasswordJobPrivate::scheduledStart()
 {
-    read_password(this, key.toUtf8().constData());
+    read_password(this, key.toUtf8().constData(), EntryNotFound, OtherError);
 }
 
 void WritePasswordJobPrivate::scheduledStart()
 {
-    write_password(this, key.toUtf8().constData(), data.constData());
+    write_password(this, key.toUtf8().constData(), data.constData(), OtherError);
 }
 
 void DeletePasswordJobPrivate::scheduledStart()
