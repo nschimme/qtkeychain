@@ -90,6 +90,10 @@ EM_JS(void, write_password, (JobPrivate* job, const char* key, const char* data)
     });
 });
 
+EM_JS(bool, is_credentials_api_available, (), {
+    return (typeof navigator !== 'undefined' && typeof navigator.credentials !== 'undefined');
+});
+
 }
 
 // scheduledStart implementations just kick off the JavaScript operations.
@@ -110,6 +114,5 @@ void DeletePasswordJobPrivate::scheduledStart()
 
 bool QKeychain::isAvailable()
 {
-    // A better implementation could check `navigator.credentials` availability here.
-    return true;
+    return is_credentials_api_available();
 }
