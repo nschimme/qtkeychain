@@ -1,0 +1,33 @@
+name: Wasm Build and Test
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/jules-labs/qt-wasm-builder:latest
+      credentials:
+        username: ${{ secrets.GHCR_USERNAME }}
+        password: ${{ secrets.GHCR_PASSWORD }}
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Configure and build
+      shell: bash
+      run: |
+        source /opt/emsdk/emsdk_env.sh
+        qt-cmake -S . -B build -DBUILD_WITH_QT6=ON -DCMAKE_BUILD_TYPE=Release -DQT_HOST_PATH=/opt/Qt/6.9.2/gcc_64
+        cmake --build build --parallel
+
+    - name: Run tests
+      shell: bash
+      run: |
+        source /opt/emsdk/emsdk_env.sh
+        cd build
+        ctest --verbose
