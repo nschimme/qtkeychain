@@ -1,0 +1,41 @@
+name: Wasm Build and Test
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Emscripten and Qt
+      run: |
+        sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+            build-essential cmake git libgl-dev libgl1-mesa-dev libglib2.0-0 libxkbcommon-dev ninja-build python3 python3-pip unzip wget nodejs npm
+        pip3 install --break-system-packages aqtinstall
+        sudo git clone https://github.com/emscripten-core/emsdk.git /opt/emsdk
+        cd /opt/emsdk
+        sudo ./emsdk install 3.1.70
+        sudo ./emsdk activate 3.1.70
+        cd -
+        sudo python3 -m aqt install-qt --outputdir /opt/Qt linux desktop 6.9.2 linux_gcc_64 -m qtwebsockets
+        sudo python3 -m aqt install-qt --outputdir /opt/Qt all_os wasm 6.9.2 wasm_multithread -m qtwebsockets
+
+    - name: Configure and build
+      shell: bash
+      run: |
+        source /opt/emsdk/emsdk_env.sh
+        qt-cmake -S . -B build -DBUILD_WITH_QT6=ON -DCMAKE_BUILD_TYPE=Release -DQT_HOST_PATH=/opt/Qt/6.9.2/gcc_64
+        cmake --build build --parallel
+
+    - name: Run tests
+      shell: bash
+      run: |
+        source /opt/emsdk/emsdk_env.sh
+        cd build
+        ctest --verbose
