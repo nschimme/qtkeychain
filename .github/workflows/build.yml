@@ -58,11 +58,13 @@ jobs:
             fi
           elif [ '${{ runner.os }}' == 'Linux' ]; then
             sudo apt-get update
+            sudo apt-get install dbus-x11 gnome-keyring pkg-config libsecret-1-dev
             if [ '${{ matrix.qt_version }}' == 'qt6' ]; then
-              sudo apt-get install -y qt6-base-dev qtchooser qmake6 qt6-base-dev-tools qt6-tools-dev pkg-config libsecret-1-dev gnome-keyring
+              sudo apt-get install -y qt6-base-dev qtchooser qmake6 qt6-base-dev-tools qt6-tools-dev
             else
-              sudo apt-get install -y qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools qttools5-dev pkg-config libsecret-1-dev gnome-keyring
+              sudo apt-get install -y qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools qttools5-dev
             fi
+            dbus-run-session -- gnome-keyring-daemon --daemonize --replace --components=secrets
           fi
 
       - name: Set AQT Version and Arch (Windows only)
