@@ -58,11 +58,13 @@ jobs:
             fi
           elif [ '${{ runner.os }}' == 'Linux' ]; then
             sudo apt-get update
+            sudo apt-get install dbus-x11 gnome-keyring pkg-config libsecret-1-dev
             if [ '${{ matrix.qt_version }}' == 'qt6' ]; then
-              sudo apt-get install -y qt6-base-dev qtchooser qmake6 qt6-base-dev-tools qt6-tools-dev pkg-config libsecret-1-dev
+              sudo apt-get install -y qt6-base-dev qtchooser qmake6 qt6-base-dev-tools qt6-tools-dev
             else
-              sudo apt-get install -y qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools qttools5-dev pkg-config libsecret-1-dev
+              sudo apt-get install -y qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools qttools5-dev
             fi
+            dbus-run-session -- gnome-keyring-daemon --daemonize --replace --components=secrets
           fi
 
       - name: Set AQT Version and Arch (Windows only)
@@ -106,7 +108,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install" `
             -DCMAKE_PREFIX_PATH=$qtPath `
-            ${{ matrix.qt_version == 'qt6' && '-DBUILD_WITH_QT6=true' || '' }}
+            ${{ matrix.qt_version == 'qt6' && '-DBUILD_WITH_QT6=true' || '' }} `
+            -DBUILD_TESTING=ON
 
       - name: Run CMake (Mac/Linux Only)
         if: runner.os != 'Windows'
@@ -115,13 +118,15 @@ jobs:
           cmake -G Ninja ${{ github.workspace }} \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install" \
-            ${{ matrix.qt_version == 'qt6' && '-DBUILD_WITH_QT6=true' || '' }}
+            ${{ matrix.qt_version == 'qt6' && '-DBUILD_WITH_QT6=true' || '' }} \
+            -DBUILD_TESTING=ON
 
       - name: Build and Install
         run: |
           cd ${{ github.workspace }}/work/build/${{ github.event.repository.name }}
           cmake --build .
           cmake --install . --prefix "${{ github.workspace }}/install"
+          ctest -V --no-compress-output
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
