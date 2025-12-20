@@ -119,7 +119,7 @@ EM_JS(void, write_password, (JobPrivate* job, const char* key, const char* data,
 });
 
 EM_JS(bool, is_credentials_api_available, (), {
-    return (typeof navigator !== 'undefined' && typeof navigator.credentials !== 'undefined');
+    return (typeof navigator !== 'undefined' && typeof navigator.credentials !== 'undefined' && typeof window.PasswordCredential !== 'undefined');
 });
 
 }
