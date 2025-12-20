@@ -64,7 +64,17 @@ EM_JS(void, read_password, (JobPrivate* job, const char* key, int entryNotFound,
         }
     }).catch(e => {
         console.error("QtKeychain read_password error:", e);
-        const errorStr = e.toString();
+        let errorStr = 'Unknown error';
+        if (e) {
+            if (e.name && e.message) {
+                errorStr = `${e.name}: ${e.message}`;
+            } else if (e.toString && typeof e.toString === 'function') {
+                errorStr = e.toString();
+            }
+            if (e.stack) {
+                errorStr += `\nStack: ${e.stack}`;
+            }
+        }
         const buffer = Module._malloc(errorStr.length + 1);
         Module.stringToUTF8(errorStr, buffer, errorStr.length + 1);
         _qtkeychain_read_password_error(job, otherError, buffer);
@@ -90,7 +100,17 @@ EM_JS(void, write_password, (JobPrivate* job, const char* key, const char* data,
         _qtkeychain_write_password_success(job);
     }).catch(e => {
         console.error("QtKeychain write_password error:", e);
-        const errorStr = e.toString();
+        let errorStr = 'Unknown error';
+        if (e) {
+            if (e.name && e.message) {
+                errorStr = `${e.name}: ${e.message}`;
+            } else if (e.toString && typeof e.toString === 'function') {
+                errorStr = e.toString();
+            }
+            if (e.stack) {
+                errorStr += `\nStack: ${e.stack}`;
+            }
+        }
         const buffer = Module._malloc(errorStr.length + 1);
         Module.stringToUTF8(errorStr, buffer, errorStr.length + 1);
         _qtkeychain_write_password_error(job, otherError, buffer);
