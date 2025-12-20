@@ -63,6 +63,7 @@ EM_JS(void, read_password, (JobPrivate* job, const char* key, int entryNotFound,
             _qtkeychain_read_password_error(job, entryNotFound, "Password entry not found");
         }
     }).catch(e => {
+        console.error("QtKeychain read_password error:", e);
         const errorStr = e.toString();
         const buffer = Module._malloc(errorStr.length + 1);
         Module.stringToUTF8(errorStr, buffer, errorStr.length + 1);
@@ -72,15 +73,23 @@ EM_JS(void, read_password, (JobPrivate* job, const char* key, int entryNotFound,
 });
 
 EM_JS(void, write_password, (JobPrivate* job, const char* key, const char* data, int otherError), {
-    const credential = {
+    const credentialData = {
         id: UTF8ToString(key),
         password: UTF8ToString(data),
         name: UTF8ToString(key) // Or some other user-friendly name
     };
-    navigator.credentials.store(new PasswordCredential(credential))
+    navigator.credentials.create({ password: credentialData })
+    .then(credential => {
+        if (!credential) {
+            // Should not happen, but just in case
+            throw new Error("Credential creation returned null");
+        }
+        return navigator.credentials.store(credential);
+    })
     .then(() => {
         _qtkeychain_write_password_success(job);
     }).catch(e => {
+        console.error("QtKeychain write_password error:", e);
         const errorStr = e.toString();
         const buffer = Module._malloc(errorStr.length + 1);
         Module.stringToUTF8(errorStr, buffer, errorStr.length + 1);
