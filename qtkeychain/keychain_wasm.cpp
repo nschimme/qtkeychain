@@ -72,7 +72,7 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
             }
             [id="qtkeychain-modal"] .btn-primary { background: #007aff; color: white; }
             [id="qtkeychain-modal"] .btn-secondary { background: #e5e5ea; color: #333; }
-            [id="qtkeychain-modal"] .btn-link { background: none; color: #007aff; text-decoration: underline; font-size: 0.85em; }
+            [id="qtkeychain-modal"] .btn-success { background: #28a745; color: white; }
         `;
         document.head.appendChild(style);
     }
@@ -85,15 +85,8 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
     overlay.appendChild(modal);
 
     const title = document.createElement('h2');
-    title.textContent = isWrite ? 'Save Credentials' : 'Access Credentials';
+    title.textContent = serviceStr;
     modal.appendChild(title);
-
-    const subtitle = document.createElement('p');
-    subtitle.style.fontSize = '0.85em';
-    subtitle.style.marginBottom = '16px';
-    subtitle.style.color = '#666';
-    subtitle.textContent = `Service: ${serviceStr}`;
-    modal.appendChild(subtitle);
 
     const form = document.createElement('form');
     form.id = 'qtkeychain-form';
@@ -109,7 +102,7 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
             document.body.appendChild(iframe);
         }
         form.target = iframeId;
-        form.action = '#'; // Or a dummy URL if needed, but # usually works for triggering 'Save' on submit
+        form.action = 'about:blank'; // Trigger browser save without reloading main page
     }
     modal.appendChild(form);
 
@@ -135,27 +128,11 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
     if (isWrite) passInput.value = dataStr;
     form.appendChild(passInput);
 
-    const actions = document.createElement('div');
-    actions.className = 'actions';
-    modal.appendChild(actions);
-
-    const submitBtn = document.createElement('button');
-    submitBtn.type = 'submit';
-    submitBtn.className = 'btn-primary';
-    submitBtn.textContent = isWrite ? 'Save' : 'Sign In';
-    actions.appendChild(submitBtn);
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.className = 'btn-secondary';
-    cancelBtn.textContent = 'Cancel';
-    actions.appendChild(cancelBtn);
-
     if (!isWrite && navigator.credentials && navigator.credentials.get) {
         const pickBtn = document.createElement('button');
         pickBtn.type = 'button';
-        pickBtn.className = 'btn-link';
-        pickBtn.style.marginTop = '12px';
+        pickBtn.className = 'btn-success';
+        pickBtn.style.marginBottom = '16px';
         pickBtn.style.display = 'block';
         pickBtn.style.width = '100%';
         pickBtn.textContent = 'Use a saved password...';
@@ -173,6 +150,22 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
         modal.appendChild(pickBtn);
     }
 
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    modal.appendChild(actions);
+
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'submit';
+    submitBtn.className = 'btn-primary';
+    submitBtn.textContent = isWrite ? 'Save' : 'Sign In';
+    actions.appendChild(submitBtn);
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'btn-secondary';
+    cancelBtn.textContent = 'Cancel';
+    actions.appendChild(cancelBtn);
+
     document.body.appendChild(overlay);
     userInput.focus();
 
@@ -186,29 +179,29 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
         cleanup();
         let errorStr = err ? (err.message || err.toString()) : "Unknown error";
         const len = lengthBytesUTF8(errorStr) + 1;
-        const buffer = Module._malloc(len);
-        Module.stringToUTF8(errorStr, buffer, len);
+        const buffer = _malloc(len);
+        stringToUTF8(errorStr, buffer, len);
         _qtkeychain_error(job, code, buffer);
-        Module._free(buffer);
+        _free(buffer);
     };
 
     cancelBtn.onclick = () => {
         cleanup();
         const msg = "User cancelled";
         const len = lengthBytesUTF8(msg) + 1;
-        const buffer = Module._malloc(len);
-        Module.stringToUTF8(msg, buffer, len);
+        const buffer = _malloc(len);
+        stringToUTF8(msg, buffer, len);
         _qtkeychain_error(job, accessDeniedByUser, buffer);
-        Module._free(buffer);
+        _free(buffer);
     };
 
-    form.onsubmit = submitBtn.onclick = (e) => {
-        if (e && e.preventDefault) e.preventDefault();
+    form.onsubmit = (e) => {
         const username = userInput.value;
         const password = passInput.value;
 
         if (isWrite) {
             if (navigator.credentials && navigator.credentials.store) {
+                if (e && e.preventDefault) e.preventDefault();
                 const cred = new PasswordCredential({
                     id: username,
                     password: password,
@@ -235,23 +228,19 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
                 }, 100);
             }
         } else {
-            e.preventDefault();
+            if (e && e.preventDefault) e.preventDefault();
             if (password) {
                 const len = lengthBytesUTF8(password) + 1;
-                const buffer = Module._malloc(len);
-                Module.stringToUTF8(password, buffer, len);
+                const buffer = _malloc(len);
+                stringToUTF8(password, buffer, len);
                 cleanup();
                 _qtkeychain_read_password_success(job, buffer, len - 1);
-                Module._free(buffer);
+                _free(buffer);
             } else {
                 handleError("Password cannot be empty", entryNotFound);
             }
         }
     };
-});
-
-EM_JS(bool, is_secure_context, (), {
-    return (typeof window !== 'undefined' && window.isSecureContext);
 });
 
 }
@@ -273,5 +262,5 @@ void DeletePasswordJobPrivate::scheduledStart()
 
 bool QKeychain::isAvailable()
 {
-    return is_secure_context();
+    return true;
 }
