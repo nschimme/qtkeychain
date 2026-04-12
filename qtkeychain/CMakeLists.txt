@@ -83,7 +83,8 @@ add_library(${QTKEYCHAIN_TARGET_NAME} ${qtkeychain_SOURCES} ${qtkeychain_MOC_OUT
 
 if(EMSCRIPTEN)
     # Qt's Wasm support uses Embind for C++/JS interaction.
-    target_link_options(${QTKEYCHAIN_TARGET_NAME} PRIVATE "--bind")
+    # This flag must be propagated to the final executable.
+    target_link_options(${QTKEYCHAIN_TARGET_NAME} INTERFACE "--bind")
 endif()
 
 if(WIN32)
