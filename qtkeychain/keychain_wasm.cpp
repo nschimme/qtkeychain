@@ -50,29 +50,29 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
-            #qtkeychain-overlay {
+            [id="qtkeychain-overlay"] {
                 position: fixed; top: 0; left: 0; width: 100%; height: 100%;
                 background: rgba(0, 0, 0, 0.5); display: flex;
                 justify-content: center; align-items: center; z-index: 2147483647;
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             }
-            #qtkeychain-modal {
+            [id="qtkeychain-modal"] {
                 background: white; padding: 24px; border-radius: 12px;
                 box-shadow: 0 8px 30px rgba(0,0,0,0.3); width: 320px; color: #333;
             }
-            #qtkeychain-modal h2 { margin: 0 0 16px 0; font-size: 1.1em; font-weight: 600; }
-            #qtkeychain-modal label { display: block; margin-bottom: 6px; font-size: 0.9em; font-weight: 500; }
-            #qtkeychain-modal input {
+            [id="qtkeychain-modal"] h2 { margin: 0 0 16px 0; font-size: 1.1em; font-weight: 600; }
+            [id="qtkeychain-modal"] label { display: block; margin-bottom: 6px; font-size: 0.9em; font-weight: 500; }
+            [id="qtkeychain-modal"] input {
                 width: 100%; margin-bottom: 16px; padding: 10px;
                 border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1em;
             }
-            #qtkeychain-modal .actions { display: flex; flex-direction: row-reverse; gap: 8px; margin-top: 16px; }
-            #qtkeychain-modal button {
+            [id="qtkeychain-modal"] .actions { display: flex; flex-direction: row-reverse; gap: 8px; margin-top: 16px; }
+            [id="qtkeychain-modal"] button {
                 flex: 1; padding: 10px; border-radius: 6px; border: none; font-size: 1em; cursor: pointer; font-weight: 500;
             }
-            #qtkeychain-modal .btn-primary { background: #007aff; color: white; }
-            #qtkeychain-modal .btn-secondary { background: #e5e5ea; color: #333; }
-            #qtkeychain-modal .btn-link { background: none; color: #007aff; text-decoration: underline; font-size: 0.85em; }
+            [id="qtkeychain-modal"] .btn-primary { background: #007aff; color: white; }
+            [id="qtkeychain-modal"] .btn-secondary { background: #e5e5ea; color: #333; }
+            [id="qtkeychain-modal"] .btn-link { background: none; color: #007aff; text-decoration: underline; font-size: 0.85em; }
         `;
         document.head.appendChild(style);
     }
@@ -163,10 +163,10 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
             navigator.credentials.get({ password: true })
             .then(cred => {
                 if (cred) {
-                    userInput.value = cred.id || '';
-                    passInput.value = cred.password || '';
+                    userInput.value = cred.id || "";
+                    passInput.value = cred.password || "";
                     // Auto-submit after picking
-                    form.dispatchEvent(new Event('submit'));
+                    form.dispatchEvent(new Event("submit"));
                 }
             }).catch(err => console.error("QtKeychain credential picker error:", err));
         };
