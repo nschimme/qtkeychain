@@ -54,46 +54,54 @@ EM_JS(void, show_bridge_form,
               const len = lengthBytesUTF8(str) + 1;
               const ptr = _malloc(len);
               stringToUTF8(str, ptr, len);
-              return { ptr, len: len - 1 };
+              const res = { ptr: ptr, len: len - 1 };
+              return res;
           };
 
           if (!document.getElementById("qtk-styles")) {
               const style = document.createElement("style");
               style.id = "qtk-styles";
-              style.textContent = `
-            [id="qtk-overlay"] { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2147483647; font-family: system-ui, sans-serif; }
-            [id="qtk-modal"] { background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.3); width: 320px; color: #333; }
-            [id="qtk-modal"] h2 { margin: 0 0 16px; font-size: 1.1em; font-weight: 600; }
-            [id="qtk-modal"] label { display: block; margin-bottom: 6px; font-size: 0.9em; font-weight: 500; }
-            [id="qtk-modal"] input { width: 100%; margin-bottom: 16px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1em; }
-            [id="qtk-modal"] .actions { display: flex; flex-direction: row-reverse; gap: 8px; }
-            [id="qtk-modal"] button { flex: 1; padding: 10px; border-radius: 6px; border: none; font-size: 1em; cursor: pointer; font-weight: 500; }
-            .qtk-primary { background: #007aff; color: #fff; }
-            .qtk-secondary { background: #e5e5ea; color: #333; }
-            .qtk-success { background: #28a745; color: #fff; margin-bottom: 16px; width: 100%; display: block; }
-        `;
+              style.textContent =
+                  "[id='qtk-overlay'] { position: fixed; inset: 0; background: rgba(0,0,0,0.5); "
+                  "display: flex; justify-content: center; align-items: center; z-index: "
+                  "2147483647; font-family: system-ui, sans-serif; } "
+                  "[id='qtk-modal'] { background: #fff; padding: 24px; border-radius: 12px; "
+                  "box-shadow: 0 8px 30px rgba(0,0,0,0.3); width: 320px; color: #333; } "
+                  "[id='qtk-modal'] h2 { margin: 0 0 16px; font-size: 1.1em; font-weight: 600; } "
+                  "[id='qtk-modal'] label { display: block; margin-bottom: 6px; font-size: 0.9em; "
+                  "font-weight: 500; } "
+                  "[id='qtk-modal'] input { width: 100%; margin-bottom: 16px; padding: 10px; "
+                  "border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: "
+                  "1em; } "
+                  "[id='qtk-modal'] .actions { display: flex; flex-direction: row-reverse; gap: "
+                  "8px; } "
+                  "[id='qtk-modal'] button { flex: 1; padding: 10px; border-radius: 6px; border: "
+                  "none; font-size: 1em; cursor: pointer; font-weight: 500; } "
+                  ".qtk-primary { background: #007aff; color: #fff; } "
+                  ".qtk-secondary { background: #e5e5ea; color: #333; } "
+                  ".qtk-success { background: #28a745; color: #fff; margin-bottom: 16px; width: "
+                  "100%; display: block; }";
               document.head.appendChild(style);
           }
 
           const overlay = document.createElement("div");
           overlay.id = "qtk-overlay";
-          overlay.innerHTML = `
-        <div id="qtk-modal">
-            <h2 id="qtk-title"></h2>
-            <form id="qtk-form" ${isWrite ? 'target="qtk-iframe" action="about:blank"' : ""}>
-                <label for="qtk-user">Username</label>
-                <input id="qtk-user" name="username" autocomplete="username">
-                <label for="qtk-pass">Password</label>
-                <input id="qtk-pass" type="password" name="password" autocomplete="${isWrite ? "new-password" : "current-password"}">
-                <div id="qtk-extra"></div>
-                <div class="actions">
-                    <button type="submit" class="qtk-primary">${isWrite ? "Save" : "Sign In"}</button>
-                    <button type="button" id="qtk-cancel" class="qtk-secondary">Cancel</button>
-                </div>
-            </form>
-            ${isWrite ? '<iframe name="qtk-iframe" style="display:none"></iframe>' : ""}
-        </div>
-    `;
+
+          const formAttr = isWrite ? 'target="qtk-iframe" action="about:blank"' : "";
+          const passAttr = isWrite ? "new-password" : "current-password";
+          const submitLabel = isWrite ? "Save" : "Sign In";
+          const extraHtml = isWrite ? '<iframe name="qtk-iframe" style="display:none"></iframe>' : "";
+
+          overlay.innerHTML =
+              '<div id="qtk-modal">' + '<h2 id="qtk-title"></h2>' + '<form id="qtk-form" ' +
+              formAttr + ">" + '<label for="qtk-user">Username</label>' +
+              '<input id="qtk-user" name="username" autocomplete="username">' +
+              '<label for="qtk-pass">Password</label>' +
+              '<input id="qtk-pass" type="password" name="password" autocomplete="' + passAttr +
+              '">' + '<div id="qtk-extra"></div>' + '<div class="actions">' +
+              '<button type="submit" class="qtk-primary">' + submitLabel + "</button>" +
+              '<button type="button" id="qtk-cancel" class="qtk-secondary">Cancel</button>' +
+              "</div>" + "</form>" + extraHtml + "</div>";
           document.body.appendChild(overlay);
 
           const form = overlay.querySelector("[id='qtk-form']");
@@ -121,7 +129,7 @@ EM_JS(void, show_bridge_form,
           };
 
           const hasCreds = navigator.credentials && navigator.credentials.get &&
-              typeof PasswordCredential !== "undefined";
+              (typeof PasswordCredential !== "undefined");
           if (!isWrite && hasCreds) {
               const btn = document.createElement("button");
               btn.type = "button";
@@ -144,12 +152,12 @@ EM_JS(void, show_bridge_form,
 
           form.onsubmit = (e) => {
               const hasStore = navigator.credentials && navigator.credentials.store &&
-                  typeof PasswordCredential !== "undefined";
+                  (typeof PasswordCredential !== "undefined");
               const useNativeStore = isWrite && hasStore;
               if (!isWrite || useNativeStore)
                   e.preventDefault();
 
-              console.log("QtKeychain: Submitting...", { isWrite, user: userInput.value });
+              console.log("QtKeychain: Submitting...", { isWrite: isWrite, user: userInput.value });
 
               if (isWrite) {
                   const done = () => {
