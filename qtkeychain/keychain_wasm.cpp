@@ -106,11 +106,16 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
     }
     modal.appendChild(form);
 
+    const userInputId = 'qtkeychain-username';
+    const passInputId = 'qtkeychain-password';
+
     const userLabel = document.createElement('label');
     userLabel.textContent = 'Username';
+    userLabel.htmlFor = userInputId;
     form.appendChild(userLabel);
 
     const userInput = document.createElement('input');
+    userInput.id = userInputId;
     userInput.type = 'text';
     userInput.name = 'username';
     userInput.autocomplete = 'username';
@@ -119,9 +124,11 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
 
     const passLabel = document.createElement('label');
     passLabel.textContent = 'Password';
+    passLabel.htmlFor = passInputId;
     form.appendChild(passLabel);
 
     const passInput = document.createElement('input');
+    passInput.id = passInputId;
     passInput.type = 'password';
     passInput.name = 'password';
     passInput.autocomplete = isWrite ? 'new-password' : 'current-password';
@@ -171,7 +178,11 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
     actions.appendChild(cancelBtn);
 
     document.body.appendChild(overlay);
-    userInput.focus();
+    if (keyStr && !isWrite) {
+        passInput.focus();
+    } else {
+        userInput.focus();
+    }
 
     const cleanup = () => {
         if (overlay.parentNode) {
