@@ -128,7 +128,7 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
     if (isWrite) passInput.value = dataStr;
     form.appendChild(passInput);
 
-    if (!isWrite && navigator.credentials && navigator.credentials.get) {
+    if (!isWrite && navigator.credentials && navigator.credentials.get && typeof PasswordCredential !== 'undefined') {
         const pickBtn = document.createElement('button');
         pickBtn.type = 'button';
         pickBtn.className = 'btn-success';
@@ -207,7 +207,7 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
         console.log("QtKeychain: Form submitted", { isWrite, username });
 
         if (isWrite) {
-            if (navigator.credentials && navigator.credentials.store) {
+            if (navigator.credentials && navigator.credentials.store && typeof PasswordCredential !== 'undefined') {
                 console.log("QtKeychain: Storing credentials...");
                 if (e && e.preventDefault) e.preventDefault();
                 const cred = new PasswordCredential({
@@ -228,7 +228,10 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
                     _qtkeychain_write_password_success(job);
                 });
             } else {
-                // Fallback for browsers without .store():
+                if (navigator.credentials && navigator.credentials.store && typeof PasswordCredential === 'undefined') {
+                    console.warn("QtKeychain: navigator.credentials.store exists but PasswordCredential is not defined. Falling back to iframe submission.");
+                }
+                // Fallback for browsers without .store() or PasswordCredential:
                 // Allow the form to submit to the hidden iframe.
                 // This is the classic way to trigger "Save Password" prompts.
                 console.log("QtKeychain: Using form submission fallback for storage");
