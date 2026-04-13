@@ -137,22 +137,26 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
         pickBtn.style.width = '100%';
         pickBtn.textContent = 'Use a saved password...';
         pickBtn.onclick = () => {
+            console.log("QtKeychain: Requesting credentials from browser...");
             navigator.credentials.get({ password: true })
             .then(cred => {
                 if (cred) {
+                    console.log("QtKeychain: Credential received");
                     userInput.value = cred.id || "";
                     passInput.value = cred.password || "";
                     // Auto-submit after picking
                     form.dispatchEvent(new Event("submit"));
+                } else {
+                    console.log("QtKeychain: No credential selected");
                 }
             }).catch(err => console.error("QtKeychain credential picker error:", err));
         };
-        modal.appendChild(pickBtn);
+        form.appendChild(pickBtn);
     }
 
     const actions = document.createElement('div');
     actions.className = 'actions';
-    modal.appendChild(actions);
+    form.appendChild(actions);
 
     const submitBtn = document.createElement('button');
     submitBtn.type = 'submit';
@@ -178,6 +182,7 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
     const handleError = (err, code) => {
         cleanup();
         let errorStr = err ? (err.message || err.toString()) : "Unknown error";
+        console.error("QtKeychain error:", errorStr, "Code:", code);
         const len = lengthBytesUTF8(errorStr) + 1;
         const buffer = _malloc(len);
         stringToUTF8(errorStr, buffer, len);
@@ -186,6 +191,7 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
     };
 
     cancelBtn.onclick = () => {
+        console.log("QtKeychain: Cancel clicked");
         cleanup();
         const msg = "User cancelled";
         const len = lengthBytesUTF8(msg) + 1;
@@ -198,9 +204,11 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
     form.onsubmit = (e) => {
         const username = userInput.value;
         const password = passInput.value;
+        console.log("QtKeychain: Form submitted", { isWrite, username });
 
         if (isWrite) {
             if (navigator.credentials && navigator.credentials.store) {
+                console.log("QtKeychain: Storing credentials...");
                 if (e && e.preventDefault) e.preventDefault();
                 const cred = new PasswordCredential({
                     id: username,
@@ -209,6 +217,7 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
                 });
                 navigator.credentials.store(cred)
                 .then(() => {
+                    console.log("QtKeychain: Credentials stored successfully");
                     cleanup();
                     _qtkeychain_write_password_success(job);
                 })
@@ -222,6 +231,7 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
                 // Fallback for browsers without .store():
                 // Allow the form to submit to the hidden iframe.
                 // This is the classic way to trigger "Save Password" prompts.
+                console.log("QtKeychain: Using form submission fallback for storage");
                 setTimeout(() => {
                     cleanup();
                     _qtkeychain_write_password_success(job);
@@ -230,6 +240,7 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
         } else {
             if (e && e.preventDefault) e.preventDefault();
             if (password) {
+                console.log("QtKeychain: Read password successful");
                 const len = lengthBytesUTF8(password) + 1;
                 const buffer = _malloc(len);
                 stringToUTF8(password, buffer, len);
