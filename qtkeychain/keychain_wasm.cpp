@@ -62,24 +62,24 @@ EM_JS(void, show_bridge_form,
               const style = document.createElement("style");
               style.id = "qtk-styles";
               style.textContent =
-                  "[id='qtk-overlay'] { position: fixed; inset: 0; background: rgba(0,0,0,0.5); "
-                  "display: flex; justify-content: center; align-items: center; z-index: "
-                  "2147483647; font-family: system-ui, sans-serif; } "
-                  "[id='qtk-modal'] { background: #fff; padding: 24px; border-radius: 12px; "
-                  "box-shadow: 0 8px 30px rgba(0,0,0,0.3); width: 320px; color: #333; } "
-                  "[id='qtk-modal'] h2 { margin: 0 0 16px; font-size: 1.1em; font-weight: 600; } "
-                  "[id='qtk-modal'] label { display: block; margin-bottom: 6px; font-size: 0.9em; "
-                  "font-weight: 500; } "
-                  "[id='qtk-modal'] input { width: 100%; margin-bottom: 16px; padding: 10px; "
-                  "border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: "
-                  "1em; } "
-                  "[id='qtk-modal'] .actions { display: flex; flex-direction: row-reverse; gap: "
-                  "8px; } "
-                  "[id='qtk-modal'] button { flex: 1; padding: 10px; border-radius: 6px; border: "
-                  "none; font-size: 1em; cursor: pointer; font-weight: 500; } "
-                  ".qtk-primary { background: #007aff; color: #fff; } "
-                  ".qtk-secondary { background: #e5e5ea; color: #333; } "
-                  ".qtk-success { background: #28a745; color: #fff; margin-bottom: 16px; width: "
+                  "[id='qtk-overlay'] { position: fixed; inset: 0; background: rgba(0,0,0,0.5); " +
+                  "display: flex; justify-content: center; align-items: center; z-index: " +
+                  "2147483647; font-family: system-ui, sans-serif; } " +
+                  "[id='qtk-modal'] { background: #fff; padding: 24px; border-radius: 12px; " +
+                  "box-shadow: 0 8px 30px rgba(0,0,0,0.3); width: 320px; color: #333; } " +
+                  "[id='qtk-modal'] h2 { margin: 0 0 16px; font-size: 1.1em; font-weight: 600; } " +
+                  "[id='qtk-modal'] label { display: block; margin-bottom: 6px; font-size: 0.9em; " +
+                  "font-weight: 500; } " +
+                  "[id='qtk-modal'] input { width: 100%; margin-bottom: 16px; padding: 10px; " +
+                  "border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: " +
+                  "1em; } " +
+                  "[id='qtk-modal'] .actions { display: flex; flex-direction: row-reverse; gap: " +
+                  "8px; } " +
+                  "[id='qtk-modal'] button { flex: 1; padding: 10px; border-radius: 6px; border: " +
+                  "none; font-size: 1em; cursor: pointer; font-weight: 500; } " +
+                  ".qtk-primary { background: #007aff; color: #fff; } " +
+                  ".qtk-secondary { background: #e5e5ea; color: #333; } " +
+                  ".qtk-success { background: #28a745; color: #fff; margin-bottom: 16px; width: " +
                   "100%; display: block; }";
               document.head.appendChild(style);
           }
