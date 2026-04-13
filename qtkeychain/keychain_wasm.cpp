@@ -93,15 +93,21 @@ EM_JS(void, show_bridge_form,
               return el;
           };
 
+          const hasCredAPI = (api) =>
+              !!(navigator.credentials && navigator.credentials[api] &&
+                 typeof PasswordCredential !== "undefined");
+
           const overlay = createEl("div", document.body, { id: "qtk-overlay" }, {
-              position: "fixed", inset: "0", background: "rgba(0,0,0,0.5)",
+              position: "fixed", inset: "0", background: "var(--qtk-overlay-bg, rgba(0,0,0,0.5))",
               display: "flex", justifyContent: "center", alignItems: "center",
-              zIndex: "2147483647", fontFamily: "system-ui, sans-serif"
+              zIndex: "2147483647", fontFamily: "var(--qtk-font-family, system-ui, sans-serif)"
           });
 
           const modal = createEl("div", overlay, { id: "qtk-modal" }, {
-              background: "#fff", padding: "24px", borderRadius: "12px",
-              boxShadow: "0 8px 30px rgba(0,0,0,0.3)", width: "320px", color: "#333"
+              background: "var(--qtk-modal-bg, #fff)", padding: "24px",
+              borderRadius: "var(--qtk-modal-radius, 12px)",
+              boxShadow: "var(--qtk-modal-shadow, 0 8px 30px rgba(0,0,0,0.3))",
+              width: "320px", color: "var(--qtk-modal-color, #333)"
           });
 
           createEl("h2", modal, { id: "qtk-title", textContent: serviceStr },
@@ -116,7 +122,9 @@ EM_JS(void, show_bridge_form,
           const labelStyle = { display: "block", marginBottom: "6px", fontSize: "0.9em", fontWeight: "500" };
           const inputStyle = {
               width: "100%", marginBottom: "16px", padding: "10px",
-              border: "1px solid #ccc", borderRadius: "6px", boxSizing: "border-box", fontSize: "1em"
+              border: "var(--qtk-input-border, 1px solid #ccc)",
+              borderRadius: "var(--qtk-input-radius, 6px)",
+              boxSizing: "border-box", fontSize: "1em"
           };
 
           createEl("label", form, { htmlFor: "qtk-user", textContent: "Username" }, labelStyle);
@@ -140,17 +148,20 @@ EM_JS(void, show_bridge_form,
                                    { display: "flex", flexDirection: "row-reverse", gap: "8px" });
 
           const btnStyle = {
-              flex: "1", padding: "10px", borderRadius: "6px", border: "none",
+              flex: "1", padding: "10px", borderRadius: "var(--qtk-btn-radius, 6px)", border: "none",
               fontSize: "1em", cursor: "pointer", fontWeight: "500"
           };
 
-          const submitBtn = createEl("button", actions, {
-              type: "submit", className: "qtk-primary", textContent: isWrite ? "Save" : "Sign In"
-          }, Object.assign({ background: "#007aff", color: "#fff" }, btnStyle));
+          const createBtn = (parent, props, style) => createEl("button", parent,
+              Object.assign({ type: "button" }, props), Object.assign({}, btnStyle, style));
 
-          const cancelBtn = createEl("button", actions, {
-              type: "button", id: "qtk-cancel", className: "qtk-secondary", textContent: "Cancel"
-          }, Object.assign({ background: "#e5e5ea", color: "#333" }, btnStyle));
+          const submitBtn = createBtn(actions, {
+              type: "submit", className: "qtk-primary", textContent: isWrite ? "Save" : "Sign In"
+          }, { background: "var(--qtk-primary-bg, #007aff)", color: "var(--qtk-primary-color, #fff)" });
+
+          const cancelBtn = createBtn(actions, {
+              id: "qtk-cancel", className: "qtk-secondary", textContent: "Cancel"
+          }, { background: "var(--qtk-secondary-bg, #e5e5ea)", color: "var(--qtk-secondary-color, #333)" });
 
           if (isWrite) {
               createEl("iframe", modal, { name: "qtk-iframe" }, { display: "none" });
@@ -187,16 +198,13 @@ EM_JS(void, show_bridge_form,
               finishWithError(accessDeniedByUser, "User cancelled");
           };
 
-          const hasCreds = navigator.credentials && navigator.credentials.get &&
-              (typeof PasswordCredential !== "undefined");
-          if (!isWrite && hasCreds) {
-              const btn = createEl("button", extraDiv, {
-                  type: "button", className: "qtk-success", textContent: "Use a saved password..."
+          if (!isWrite && hasCredAPI("get")) {
+              const btn = createBtn(extraDiv, {
+                  className: "qtk-success", textContent: "Use a saved password..."
               }, {
-                  background: "#28a745", color: "#fff", marginBottom: "16px",
-                  padding: "10px", borderRadius: "6px", border: "none",
-                  fontSize: "1em", cursor: "pointer", fontWeight: "500",
-                  width: "100%", display: "block"
+                  background: "var(--qtk-success-bg, #28a745)",
+                  color: "var(--qtk-success-color, #fff)",
+                  marginBottom: "16px", width: "100%", display: "block"
               });
               btn.onclick = () => {
                   console.log("QtKeychain: Requesting credentials...");
@@ -213,9 +221,7 @@ EM_JS(void, show_bridge_form,
           }
 
           form.onsubmit = (e) => {
-              const hasStore = navigator.credentials && navigator.credentials.store &&
-                  (typeof PasswordCredential !== "undefined");
-              const useNativeStore = isWrite && hasStore;
+              const useNativeStore = isWrite && hasCredAPI("store");
               if (!isWrite || useNativeStore)
                   e.preventDefault();
 
