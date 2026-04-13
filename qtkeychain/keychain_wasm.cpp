@@ -106,34 +106,24 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
     }
     modal.appendChild(form);
 
-    const userInputId = 'qtkeychain-username';
-    const passInputId = 'qtkeychain-password';
+    const createField = (label, id, type, autocomplete, value) => {
+        const lbl = document.createElement('label');
+        lbl.textContent = label;
+        lbl.htmlFor = id;
+        form.appendChild(lbl);
+        const input = document.createElement('input');
+        input.id = id;
+        input.type = type;
+        input.name = (type === 'password' ? 'password' : 'username');
+        input.autocomplete = autocomplete;
+        input.value = value;
+        form.appendChild(input);
+        return input;
+    };
 
-    const userLabel = document.createElement('label');
-    userLabel.textContent = 'Username';
-    userLabel.htmlFor = userInputId;
-    form.appendChild(userLabel);
-
-    const userInput = document.createElement('input');
-    userInput.id = userInputId;
-    userInput.type = 'text';
-    userInput.name = 'username';
-    userInput.autocomplete = 'username';
-    userInput.value = keyStr;
-    form.appendChild(userInput);
-
-    const passLabel = document.createElement('label');
-    passLabel.textContent = 'Password';
-    passLabel.htmlFor = passInputId;
-    form.appendChild(passLabel);
-
-    const passInput = document.createElement('input');
-    passInput.id = passInputId;
-    passInput.type = 'password';
-    passInput.name = 'password';
-    passInput.autocomplete = isWrite ? 'new-password' : 'current-password';
-    if (isWrite) passInput.value = dataStr;
-    form.appendChild(passInput);
+    const userInput = createField('Username', 'qtkeychain-username', 'text', 'username', keyStr);
+    const passInput = createField('Password', 'qtkeychain-password', 'password',
+                                  isWrite ? 'new-password' : 'current-password', isWrite ? dataStr : '');
 
     if (!isWrite && navigator.credentials && navigator.credentials.get && typeof PasswordCredential !== 'undefined') {
         const pickBtn = document.createElement('button');
@@ -185,85 +175,47 @@ EM_JS(void, show_bridge_form, (JobPrivate* job, const char* service, const char*
     }
 
     const cleanup = () => {
-        if (overlay.parentNode) {
-            document.body.removeChild(overlay);
+        if (overlay.parentNode) document.body.removeChild(overlay);
+    };
+
+    const finish = (type, data, code) => {
+        cleanup();
+        if (type === 'error') {
+            const errorStr = data ? (data.message || data.toString()) : "Unknown error";
+            console.error("QtKeychain error:", errorStr, "Code:", code);
+            const len = lengthBytesUTF8(errorStr) + 1;
+            const buffer = _malloc(len);
+            stringToUTF8(errorStr, buffer, len);
+            _qtkeychain_error(job, code, buffer);
+            _free(buffer);
+        } else if (type === 'read') {
+            const len = lengthBytesUTF8(data) + 1;
+            const buffer = _malloc(len);
+            stringToUTF8(data, buffer, len);
+            _qtkeychain_read_password_success(job, buffer, len - 1);
+            _free(buffer);
+        } else {
+            _qtkeychain_write_password_success(job);
         }
     };
 
-    const handleError = (err, code) => {
-        cleanup();
-        let errorStr = err ? (err.message || err.toString()) : "Unknown error";
-        console.error("QtKeychain error:", errorStr, "Code:", code);
-        const len = lengthBytesUTF8(errorStr) + 1;
-        const buffer = _malloc(len);
-        stringToUTF8(errorStr, buffer, len);
-        _qtkeychain_error(job, code, buffer);
-        _free(buffer);
-    };
-
-    cancelBtn.onclick = () => {
-        console.log("QtKeychain: Cancel clicked");
-        cleanup();
-        const msg = "User cancelled";
-        const len = lengthBytesUTF8(msg) + 1;
-        const buffer = _malloc(len);
-        stringToUTF8(msg, buffer, len);
-        _qtkeychain_error(job, accessDeniedByUser, buffer);
-        _free(buffer);
-    };
+    cancelBtn.onclick = () => finish('error', "User cancelled", accessDeniedByUser);
 
     form.onsubmit = (e) => {
         const username = userInput.value;
         const password = passInput.value;
-        console.log("QtKeychain: Form submitted", { isWrite, username });
-
         if (isWrite) {
-            if (navigator.credentials && navigator.credentials.store && typeof PasswordCredential !== 'undefined') {
-                console.log("QtKeychain: Storing credentials...");
+            const useStore = navigator.credentials && navigator.credentials.store && typeof PasswordCredential !== 'undefined';
+            if (useStore) {
                 if (e && e.preventDefault) e.preventDefault();
-                const cred = new PasswordCredential({
-                    id: username,
-                    password: password,
-                    name: username
-                });
-                navigator.credentials.store(cred)
-                .then(() => {
-                    console.log("QtKeychain: Credentials stored successfully");
-                    cleanup();
-                    _qtkeychain_write_password_success(job);
-                })
-                .catch(err => {
-                    console.error("QtKeychain store error:", err);
-                    // Even if store fails, we finish successfully as the interaction occurred
-                    cleanup();
-                    _qtkeychain_write_password_success(job);
-                });
+                navigator.credentials.store(new PasswordCredential({ id: username, password: password, name: username }))
+                .finally(() => finish('write'));
             } else {
-                if (navigator.credentials && navigator.credentials.store && typeof PasswordCredential === 'undefined') {
-                    console.warn("QtKeychain: navigator.credentials.store exists but PasswordCredential is not defined. Falling back to iframe submission.");
-                }
-                // Fallback for browsers without .store() or PasswordCredential:
-                // Allow the form to submit to the hidden iframe.
-                // This is the classic way to trigger "Save Password" prompts.
-                console.log("QtKeychain: Using form submission fallback for storage");
-                setTimeout(() => {
-                    cleanup();
-                    _qtkeychain_write_password_success(job);
-                }, 100);
+                setTimeout(() => finish('write'), 100);
             }
         } else {
             if (e && e.preventDefault) e.preventDefault();
-            if (password) {
-                console.log("QtKeychain: Read password successful");
-                const len = lengthBytesUTF8(password) + 1;
-                const buffer = _malloc(len);
-                stringToUTF8(password, buffer, len);
-                cleanup();
-                _qtkeychain_read_password_success(job, buffer, len - 1);
-                _free(buffer);
-            } else {
-                handleError("Password cannot be empty", entryNotFound);
-            }
+            password ? finish('read', password) : finish('error', "Password cannot be empty", entryNotFound);
         }
     };
 });
