@@ -54,7 +54,7 @@ EM_JS(void, hide_bridge_form, (JobPrivate * job), {
     const cleanup = window.qtk_active_jobs.get(job);
     if (cleanup) {
         cleanup();
-        window.qtk_active_jobs.delete (job);
+        window.qtk_active_jobs.delete(job);
     }
 });
 
@@ -163,14 +163,12 @@ EM_JS(void, show_bridge_form,
               passInput.value = "";
               overlay.remove();
               if (window.qtk_active_jobs)
-                  window.qtk_active_jobs.delete (job);
+                  window.qtk_active_jobs.delete(job);
           };
 
           if (!window.qtk_active_jobs)
               window.qtk_active_jobs = new Map();
           window.qtk_active_jobs.set(job, cleanup);
-
-          document.body.appendChild(overlay);
 
           const finishWithError = (code, msg) => {
               cleanup();
