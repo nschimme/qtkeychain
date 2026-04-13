@@ -42,6 +42,12 @@ void qtkeychain_error(JobPrivate *job, int error, const char *errorString)
 
 namespace {
 
+/*
+ * hide_bridge_form: Closes the Bridge UI for a specific job.
+ * This is used for lifecycle tracking: if the C++ Job object is destroyed
+ * before the user interacts with the UI, we must close it to prevent
+ * JavaScript callbacks from accessing a stale pointer.
+ */
 EM_JS(void, hide_bridge_form, (JobPrivate * job), {
     if (!window.qtk_active_jobs)
         return;
@@ -259,9 +265,6 @@ EM_JS(void, show_bridge_form,
 
 void ReadPasswordJobPrivate::scheduledStart()
 {
-    // Lifecycle tracking: if the C++ Job object is destroyed before the user
-    // interacts with the Bridge UI, we must close the UI to prevent the JS
-    // callbacks from accessing a stale pointer.
     QObject::connect(this, &QObject::destroyed, [this] { hide_bridge_form(this); });
     show_bridge_form(this, service.toUtf8().constData(), key.toUtf8().constData(), "", 0, false,
                      EntryNotFound, AccessDeniedByUser);
@@ -269,9 +272,6 @@ void ReadPasswordJobPrivate::scheduledStart()
 
 void WritePasswordJobPrivate::scheduledStart()
 {
-    // Lifecycle tracking: if the C++ Job object is destroyed before the user
-    // interacts with the Bridge UI, we must close the UI to prevent the JS
-    // callbacks from accessing a stale pointer.
     QObject::connect(this, &QObject::destroyed, [this] { hide_bridge_form(this); });
     show_bridge_form(this, service.toUtf8().constData(), key.toUtf8().constData(), data.constData(),
                      data.length(), true, EntryNotFound, AccessDeniedByUser);
