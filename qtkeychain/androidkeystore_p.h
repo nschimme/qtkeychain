@@ -280,6 +280,18 @@ public:
 } // namespace java
 
 namespace android {
+namespace os {
+
+class Build : public java::lang::Object
+{
+public:
+    using Object::Object;
+
+    static int SDK_INT();
+};
+
+} // namespace os
+
 namespace content {
 
 class Context : public java::lang::Object
@@ -313,11 +325,121 @@ public:
     using AlgorithmParameterSpec::AlgorithmParameterSpec;
 };
 
+namespace keystore {
+
+class KeyGenParameterSpec : public java::security::spec::AlgorithmParameterSpec
+{
+public:
+    class Builder : public java::lang::Object
+    {
+    public:
+        using Object::Object;
+
+        Builder(const QString &alias, int purposes);
+
+        Builder setBlockModes(const QStringList &modes) const;
+        Builder setEncryptionPaddings(const QStringList &paddings) const;
+        Builder setUserAuthenticationRequired(bool required) const;
+        Builder setInvalidatedByBiometricEnrollment(bool invalidate) const;
+        KeyGenParameterSpec build() const;
+    };
+
+    using AlgorithmParameterSpec::AlgorithmParameterSpec;
+};
+
+class KeyProperties : public java::lang::Object
+{
+public:
+    using Object::Object;
+
+    static const int PURPOSE_ENCRYPT;
+    static const int PURPOSE_DECRYPT;
+    static const QString BLOCK_MODE_CBC;
+    static const QString BLOCK_MODE_ECB;
+    static const QString ENCRYPTION_PADDING_PKCS7;
+    static const QString ENCRYPTION_PADDING_RSA_PKCS1;
+};
+
+} // namespace keystore
 } // namespace security
 } // namespace android
 
+namespace android {
+namespace hardware {
+namespace biometrics {
+
+class BiometricPrompt : public java::lang::Object
+{
+public:
+    using Object::Object;
+
+    class CryptoObject : public java::lang::Object
+    {
+    public:
+        using Object::Object;
+
+        explicit CryptoObject(const javax::crypto::Cipher &cipher);
+    };
+
+    class AuthenticationCallback : public java::lang::Object
+    {
+    public:
+        using Object::Object;
+    };
+
+    class Builder : public java::lang::Object
+    {
+    public:
+        using Object::Object;
+
+        explicit Builder(const android::content::Context &context);
+
+        Builder setTitle(const QString &title) const;
+        Builder setNegativeButton(const QString &text, const java::util::concurrent::Executor &executor, jobject listener) const;
+        BiometricPrompt build() const;
+    };
+
+    void authenticate(const CryptoObject &crypto, jobject cancellationSignal, const java::util::concurrent::Executor &executor, const AuthenticationCallback &callback) const;
+};
+
+} // namespace biometrics
+} // namespace hardware
+} // namespace android
+
+namespace java {
+namespace util {
+namespace concurrent {
+
+class Executor : public java::lang::Object
+{
+public:
+    using Object::Object;
+};
+
+} // namespace concurrent
+} // namespace util
+} // namespace java
+
 namespace javax {
 namespace crypto {
+
+class SecretKey : public java::security::Key
+{
+public:
+    using Key::Key;
+
+    SecretKey(const Key &init) : Key(init) { }
+};
+
+class KeyGenerator : public java::lang::Object
+{
+public:
+    using Object::Object;
+
+    static KeyGenerator getInstance(const QString &algorithm, const QString &provider);
+    bool init(const java::security::spec::AlgorithmParameterSpec &spec) const;
+    SecretKey generateKey() const;
+};
 
 class Cipher : public java::lang::Object
 {
@@ -329,6 +451,7 @@ public:
 
     static Cipher getInstance(const QString &transformation);
     bool init(int opMode, const java::security::Key &key) const;
+    QByteArray doFinal(const QByteArray &input) const;
 };
 
 class CipherInputStream : public java::io::FilterInputStream

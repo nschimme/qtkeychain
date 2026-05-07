@@ -56,6 +56,9 @@ struct ErrorDescription
         case errSecVerifyFailed:
             return ErrorDescription(QKeychain::AccessDenied,
                                     Job::tr("A cryptographic verification failure has occurred"));
+        case errSecAuthFailed:
+            // Handled below
+            break;
         case errSecUnimplemented:
             return ErrorDescription(QKeychain::NotImplemented,
                                     Job::tr("Function or operation not implemented"));
@@ -80,6 +83,11 @@ struct ErrorDescription
         case errSecDecode:
             return ErrorDescription(QKeychain::OtherError,
                                     Job::tr("Unable to decode the provided data"));
+        case errSecAuthFailed:
+            // This error is typically returned when kSecAccessControlBiometryCurrentSet is used
+            // and the biometric database has changed (e.g. new fingerprint added).
+            return ErrorDescription(QKeychain::BiometricEnrollmentChanged,
+                                    Job::tr("Biometric enrollment changed, the secret is no longer accessible"));
         }
 
         return ErrorDescription(QKeychain::OtherError, Job::tr("Unknown error"));
@@ -255,7 +263,7 @@ static void StartWritePassword(const QString &service, const QString &key, const
         if (securityLevel == QKeychain::Job::Biometric) {
             accessControl = SecAccessControlCreateWithFlags(
                     kCFAllocatorDefault, kSecAttrAccessibleWhenUnlocked,
-                    kSecAccessControlUserPresence, &error);
+                    kSecAccessControlBiometryCurrentSet, &error);
         }
 
         OSStatus status = SecItemCopyMatching((__bridge const CFDictionaryRef)query, nil);
