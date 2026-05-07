@@ -85,7 +85,7 @@ bool isWindowsHelloAvailable()
     return VerifyVersionInfoW(&osi, VER_MAJORVERSION | VER_MINORVERSION, mask);
 }
 
-bool verifyUserPresence(const QString &service)
+bool verifyUserPresence(const QString &prompt)
 {
     if (!isWindowsHelloAvailable())
         return true;
@@ -121,8 +121,7 @@ bool verifyUserPresence(const QString &service)
     credui.cbSize = sizeof(credui);
     credui.hwndParent = nullptr;
 
-    const QString message = QObject::tr("Authenticate to access %1").arg(service);
-    credui.pszMessageText = reinterpret_cast<const wchar_t *>(message.utf16());
+    credui.pszMessageText = reinterpret_cast<const wchar_t *>(prompt.utf16());
     credui.pszCaptionText = L"QtKeychain";
 
     ULONG authPackage = 0;
@@ -130,10 +129,11 @@ bool verifyUserPresence(const QString &service)
     ULONG authBufferSize = 0;
     BOOL save = FALSE;
 
-    // Flags: CREDUIWIN_GENERIC (0x1) | CREDUIWIN_ALLOW_UNKNOWN_SCHEME (0x2) | CREDUIWIN_ENUMERATE_CURRENT_USER (0x200)
-    const DWORD status = pPrompt(
-            &credui, 0, &authPackage, nullptr, 0, &authBuffer, &authBufferSize, &save,
-            0x1 | 0x2 | 0x200);
+    constexpr DWORD flags = 0x1 /* CREDUIWIN_GENERIC */ | 0x200 /* CREDUIWIN_ENUMERATE_CURRENT_USER */
+            | 0x2 /* CREDUIWIN_ALLOW_UNKNOWN_SCHEME */;
+
+    const DWORD status = pPrompt(&credui, 0, &authPackage, nullptr, 0, &authBuffer, &authBufferSize,
+                                 &save, flags);
 
     if (status == ERROR_SUCCESS) {
         if (authBuffer) {
@@ -165,7 +165,7 @@ bool verifyUserPresence(const QString &service)
 void ReadPasswordJobPrivate::scheduledStart()
 {
     if (securityLevel == Job::Biometric) {
-        if (!verifyUserPresence(q->service())) {
+        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
             q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
             return;
         }
@@ -219,7 +219,7 @@ void ReadPasswordJobPrivate::scheduledStart()
 void WritePasswordJobPrivate::scheduledStart()
 {
     if (securityLevel == Job::Biometric) {
-        if (!verifyUserPresence(q->service())) {
+        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
             q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
             return;
         }
@@ -304,7 +304,7 @@ void WritePasswordJobPrivate::scheduledStart()
 void DeletePasswordJobPrivate::scheduledStart()
 {
     if (securityLevel == Job::Biometric) {
-        if (!verifyUserPresence(q->service())) {
+        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
             q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
             return;
         }
@@ -333,7 +333,7 @@ void DeletePasswordJobPrivate::scheduledStart()
 void ReadPasswordJobPrivate::scheduledStart()
 {
     if (securityLevel == Job::Biometric) {
-        if (!verifyUserPresence(q->service())) {
+        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
             q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
             return;
         }
@@ -358,7 +358,7 @@ void ReadPasswordJobPrivate::scheduledStart()
 void WritePasswordJobPrivate::scheduledStart()
 {
     if (securityLevel == Job::Biometric) {
-        if (!verifyUserPresence(q->service())) {
+        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
             q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
             return;
         }
@@ -383,7 +383,7 @@ void WritePasswordJobPrivate::scheduledStart()
 void DeletePasswordJobPrivate::scheduledStart()
 {
     if (securityLevel == Job::Biometric) {
-        if (!verifyUserPresence(q->service())) {
+        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
             q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
             return;
         }

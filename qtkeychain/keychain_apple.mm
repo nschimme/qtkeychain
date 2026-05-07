@@ -128,6 +128,11 @@ struct ErrorDescription
     return _context;
 }
 
+- (Job *)job
+{
+    return _job;
+}
+
 - (QKeychain::Job::SecurityLevel)effectiveSecurityLevel
 {
     if (!_job || _job->securityLevel() != QKeychain::Job::Biometric) {
@@ -198,8 +203,8 @@ static void StartReadPassword(const QString &service, const QString &key,
         }];
 
         if (securityLevel == QKeychain::Job::Biometric) {
-            const auto prompt = Job::tr("Authenticate to access %1").arg(service);
-            [query setObject:prompt.toNSString() forKey:(__bridge NSString *)kSecUseOperationPrompt];
+            const auto prompt = interface.job->defaultAuthenticationPrompt();
+            interface.context.localizedReason = prompt.toNSString();
             [query setObject:[interface context] forKey:(__bridge NSString *)kSecUseAuthenticationContext];
         }
 
@@ -239,8 +244,8 @@ static void StartWritePassword(const QString &service, const QString &key, const
         }];
 
         if (securityLevel == QKeychain::Job::Biometric) {
-            const auto prompt = Job::tr("Authenticate to access %1").arg(service);
-            [query setObject:prompt.toNSString() forKey:(__bridge NSString *)kSecUseOperationPrompt];
+            const auto prompt = interface.job->defaultAuthenticationPrompt();
+            interface.context.localizedReason = prompt.toNSString();
             [query setObject:[interface context] forKey:(__bridge NSString *)kSecUseAuthenticationContext];
         }
 
@@ -347,8 +352,8 @@ static void StartDeletePassword(const QString &service, const QString &key,
         }];
 
         if (securityLevel == QKeychain::Job::Biometric) {
-            const auto prompt = Job::tr("Authenticate to access %1").arg(service);
-            [query setObject:prompt.toNSString() forKey:(__bridge NSString *)kSecUseOperationPrompt];
+            const auto prompt = interface.job->defaultAuthenticationPrompt();
+            interface.context.localizedReason = prompt.toNSString();
             [query setObject:[interface context] forKey:(__bridge NSString *)kSecUseAuthenticationContext];
         }
 

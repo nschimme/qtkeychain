@@ -166,6 +166,12 @@ public:
      */
     void setSecurityLevel(SecurityLevel level);
 
+    /**
+     * @return A default localized authentication prompt string derived from the service name.
+     * @since 0.15
+     */
+    QString defaultAuthenticationPrompt() const;
+
     void emitFinished();
     void emitFinishedWithError(Error, const QString &errorString);
 

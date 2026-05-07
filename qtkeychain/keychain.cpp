@@ -143,6 +143,12 @@ void Job::setSecurityLevel(SecurityLevel level)
     d->securityLevel = level;
 }
 
+QString Job::defaultAuthenticationPrompt() const
+{
+    return d->service.isEmpty() ? tr("Authenticate to access keychain")
+                                : tr("Authenticate to access %1").arg(d->service);
+}
+
 WritePasswordJob::WritePasswordJob(const QString &service, QObject *parent)
     : Job(new WritePasswordJobPrivate(service, this), parent)
 {
