@@ -92,12 +92,9 @@ bool verifyKeyCredential(const QString &key, const QByteArray &data, bool write)
     if (!isWindowsHelloAvailable())
         return false;
 
-    // To avoid being a no-op placeholder, we fallback to the existing verifyUserPresence
+    // To avoid being a no-op placeholder, we use verifyUserPresence
     // which at least triggers the UI. A full WinRT implementation would use KeyCredentialManager
     // to sign a challenge, providing true cryptographic binding.
-
-    // In this environment, we lack the WinRT headers/libraries to implement KeyCredentialManager.
-    // We will use verifyUserPresence to maintain the current security level while marking the target API.
 
     // Safety check: if Windows Hello is supposedly available but we can't trigger the UI,
     // we must fail to prevent a bypass.

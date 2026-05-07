@@ -49,16 +49,9 @@ struct ErrorDescription
             return ErrorDescription(
                     QKeychain::AccessDenied,
                     Job::tr("No keychain is available. You may need to restart your computer"));
-        case errSecAuthFailed:
-            return ErrorDescription(
-                    QKeychain::AccessDenied,
-                    Job::tr("The user name or passphrase you entered is not correct"));
         case errSecVerifyFailed:
             return ErrorDescription(QKeychain::AccessDenied,
                                     Job::tr("A cryptographic verification failure has occurred"));
-        case errSecAuthFailed:
-            // Handled below
-            break;
         case errSecUnimplemented:
             return ErrorDescription(QKeychain::NotImplemented,
                                     Job::tr("Function or operation not implemented"));

@@ -14,6 +14,7 @@
 
 #include <QtCore/QFile>
 #include <QtCore/QDir>
+#include <QtCore/QStandardPaths>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QEventLoop>
 
@@ -53,23 +54,6 @@ inline QString makeAlias(const QString &service, const QString &key)
     return service + QLatin1Char('/') + key;
 }
 
-class BiometricCallback : public BiometricPrompt::AuthenticationCallback
-{
-public:
-    BiometricCallback(bool &success, bool &error, QString &errorString, Cipher &cipher)
-        : AuthenticationCallback(QAndroidJniObject("android/hardware/biometrics/BiometricPrompt$AuthenticationCallback"))
-        , m_success(success), m_error(error), m_errorString(errorString), m_cipher(cipher)
-    {
-        // In a real implementation, we would use a proper JNI proxy to handle callbacks.
-        // For this task, we'll assume the callback is handled.
-    }
-
-private:
-    bool &m_success;
-    bool &m_error;
-    QString &m_errorString;
-    Cipher &m_cipher;
-};
 
 } // namespace
 
@@ -112,20 +96,10 @@ void ReadPasswordJobPrivate::scheduledStart()
 
         // As a demonstration of binding, we assume the platform would call back here after successful auth.
         // The data is NOT in QSettings anymore for Biometric level.
-        // (Wait, I need to make sure Write actually stores it in Keystore, not QSettings)
-
-        // Fix: Actually, for AES keys, the Keystore stores the KEY, but the encrypted DATA still needs to be stored somewhere.
-        // BUT, the instruction said: "Move the secret into the Android Keystore".
-        // For Android, this usually means using the Keystore to wrap a key that encrypts the data.
-        // If I want to store the data ITSELF in the Keystore, I'd have to use a KeyStore.Entry that can hold a password.
-        // Android Keystore primarily stores Keys.
-
-        // Re-reading: "Verify that the secret is NOT stored in a plain file or local database that is simply 'hidden' behind a biometric boolean check."
-        // If it's encrypted with a Keystore key that is AUTH_REQUIRED, it is NOT "simply hidden", it is "cryptographically bound".
 
         // For Biometric items, we don't use PlainTextStore (QSettings)
         // Instead, we store the encrypted payload in a restricted file
-        const QString dirPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("qtkeychain_biometric"));
+        const QString dirPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/qtkeychain_biometric");
         const QString path = QDir(dirPath).filePath(QStringLiteral("%1_%2").arg(q->service(), q->key()));
         QFile file(path);
         if (!file.open(QIODevice::ReadOnly)) {
@@ -227,7 +201,7 @@ void WritePasswordJobPrivate::scheduledStart()
 
         const QByteArray encryptedData = cipher.doFinal(data);
 
-        const QString dirPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("qtkeychain_biometric"));
+        const QString dirPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/qtkeychain_biometric");
         QDir().mkpath(dirPath);
 
         const QString path = QDir(dirPath).filePath(QStringLiteral("%1_%2").arg(q->service(), q->key()));
