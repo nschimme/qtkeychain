@@ -18,11 +18,9 @@ using namespace java::lang;
 using namespace java::math;
 using namespace java::util;
 using namespace java::security;
-using namespace java::security::spec;
 
 using namespace javax::crypto;
 using namespace javax::security::auth::x500;
-using namespace javax::security::cert;
 
 const BigInteger BigInteger::ONE =
         BigInteger::getStaticObjectField("java/math/BigInteger", "ONE", "Ljava/math/BigInteger;");
@@ -133,7 +131,7 @@ KeyGenerator KeyGenerator::getInstance(const QString &algorithm, const QString &
             fromString(algorithm).object(), fromString(provider).object()));
 }
 
-bool KeyGenerator::init(const AlgorithmParameterSpec &spec) const
+bool KeyGenerator::init(const java::lang::Object &spec) const
 {
     callMethod<void>("init", "(Ljava/security/spec/AlgorithmParameterSpec;)V", spec.object());
     return handleExceptions();
@@ -149,7 +147,7 @@ KeyPair KeyPairGenerator::generateKeyPair() const
     return handleExceptions(callObjectMethod("generateKeyPair", "()Ljava/security/KeyPair;"));
 }
 
-bool KeyPairGenerator::initialize(const AlgorithmParameterSpec &spec) const
+bool KeyPairGenerator::initialize(const java::lang::Object &spec) const
 {
     callMethod<void>("initialize", "(Ljava/security/spec/AlgorithmParameterSpec;)V", spec.object());
     return handleExceptions();
@@ -175,7 +173,7 @@ KeyStore KeyStore::getInstance(const QString &type)
 }
 
 KeyStore::Entry KeyStore::getEntry(const QString &alias,
-                                   const KeyStore::ProtectionParameter &param) const
+                                   const java::lang::Object &param) const
 {
     return handleExceptions(
             callObjectMethod("getEntry",
@@ -184,7 +182,7 @@ KeyStore::Entry KeyStore::getEntry(const QString &alias,
                              fromString(alias).object(), param.object()));
 }
 
-bool KeyStore::load(const KeyStore::LoadStoreParameter &param) const
+bool KeyStore::load(const java::lang::Object &param) const
 {
     callMethod<void>("load", "(Ljava/security/KeyStore$LoadStoreParameter;)V", param.object());
     return handleExceptions();
@@ -207,70 +205,22 @@ Date Calendar::getTime() const
     return handleExceptions(callObjectMethod("getTime", "()Ljava/util/Date;"));
 }
 
-KeyPairGeneratorSpec::Builder::Builder(const Context &context)
+android::security::KeyPairGeneratorSpec::Builder::Builder(const Context &context)
     : Object(QAndroidJniObject("android/security/KeyPairGeneratorSpec$Builder",
                                "(Landroid/content/Context;)V", context.object()))
 {
     handleExceptions();
 }
 
-android::hardware::biometrics::BiometricPrompt::CryptoObject::CryptoObject(const javax::crypto::Cipher &cipher)
-    : Object(QAndroidJniObject("android/hardware/biometrics/BiometricPrompt$CryptoObject",
-                               "(Ljavax/crypto/Cipher;)V", cipher.object()))
-{
-    handleExceptions();
-}
-
-android::hardware::biometrics::BiometricPrompt::Builder::Builder(const android::content::Context &context)
-    : Object(QAndroidJniObject("android/hardware/biometrics/BiometricPrompt$Builder",
-                               "(Landroid/content/Context;)V", context.object()))
-{
-    handleExceptions();
-}
-
-android::hardware::biometrics::BiometricPrompt::Builder
-android::hardware::biometrics::BiometricPrompt::Builder::setTitle(const QString &title) const
-{
-    return handleExceptions(callObjectMethod(
-            "setTitle", "(Ljava/lang/CharSequence;)Landroid/hardware/biometrics/BiometricPrompt$Builder;",
-            fromString(title).object()));
-}
-
-android::hardware::biometrics::BiometricPrompt::Builder
-android::hardware::biometrics::BiometricPrompt::Builder::setNegativeButton(
-        const QString &text, const java::util::concurrent::Executor &executor, jobject listener) const
-{
-    return handleExceptions(callObjectMethod(
-            "setNegativeButton",
-            "(Ljava/lang/CharSequence;Ljava/util/concurrent/Executor;Landroid/content/DialogInterface$OnClickListener;)Landroid/hardware/biometrics/BiometricPrompt$Builder;",
-            fromString(text).object(), executor.object(), listener));
-}
-
-android::hardware::biometrics::BiometricPrompt
-android::hardware::biometrics::BiometricPrompt::Builder::build() const
-{
-    return handleExceptions(callObjectMethod("build", "()Landroid/hardware/biometrics/BiometricPrompt;"));
-}
-
-void android::hardware::biometrics::BiometricPrompt::authenticate(
-        const CryptoObject &crypto, jobject cancellationSignal, const java::util::concurrent::Executor &executor,
-        const AuthenticationCallback &callback) const
-{
-    callMethod<void>("authenticate",
-                     "(Landroid/hardware/biometrics/BiometricPrompt$CryptoObject;Landroid/os/CancellationSignal;Ljava/util/concurrent/Executor;Landroid/hardware/biometrics/BiometricPrompt$AuthenticationCallback;)V",
-                     crypto.object(), cancellationSignal, executor.object(), callback.object());
-    handleExceptions();
-}
-
-KeyPairGeneratorSpec::Builder KeyPairGeneratorSpec::Builder::setAlias(const QString &alias) const
+android::security::KeyPairGeneratorSpec::Builder android::security::KeyPairGeneratorSpec::Builder::setAlias(const QString &alias) const
 {
     return handleExceptions(callObjectMethod(
             "setAlias", "(Ljava/lang/String;)Landroid/security/KeyPairGeneratorSpec$Builder;",
             fromString(alias).object()));
 }
 
-KeyPairGeneratorSpec::Builder
-KeyPairGeneratorSpec::Builder::setSubject(const X500Principal &subject) const
+android::security::KeyPairGeneratorSpec::Builder
+android::security::KeyPairGeneratorSpec::Builder::setSubject(const javax::security::auth::x500::X500Principal &subject) const
 {
     return handleExceptions(callObjectMethod("setSubject",
                                              "(Ljavax/security/auth/x500/X500Principal;)Landroid/"
@@ -278,8 +228,8 @@ KeyPairGeneratorSpec::Builder::setSubject(const X500Principal &subject) const
                                              subject.object()));
 }
 
-KeyPairGeneratorSpec::Builder
-KeyPairGeneratorSpec::Builder::setSerialNumber(const BigInteger &serial) const
+android::security::KeyPairGeneratorSpec::Builder
+android::security::KeyPairGeneratorSpec::Builder::setSerialNumber(const BigInteger &serial) const
 {
     return handleExceptions(callObjectMethod(
             "setSerialNumber",
@@ -287,21 +237,21 @@ KeyPairGeneratorSpec::Builder::setSerialNumber(const BigInteger &serial) const
             serial.object()));
 }
 
-KeyPairGeneratorSpec::Builder KeyPairGeneratorSpec::Builder::setStartDate(const Date &date) const
+android::security::KeyPairGeneratorSpec::Builder android::security::KeyPairGeneratorSpec::Builder::setStartDate(const Date &date) const
 {
     return handleExceptions(callObjectMethod(
             "setStartDate", "(Ljava/util/Date;)Landroid/security/KeyPairGeneratorSpec$Builder;",
             date.object()));
 }
 
-KeyPairGeneratorSpec::Builder KeyPairGeneratorSpec::Builder::setEndDate(const Date &date) const
+android::security::KeyPairGeneratorSpec::Builder android::security::KeyPairGeneratorSpec::Builder::setEndDate(const Date &date) const
 {
     return handleExceptions(callObjectMethod(
             "setEndDate", "(Ljava/util/Date;)Landroid/security/KeyPairGeneratorSpec$Builder;",
             date.object()));
 }
 
-KeyPairGeneratorSpec KeyPairGeneratorSpec::Builder::build() const
+android::security::KeyPairGeneratorSpec android::security::KeyPairGeneratorSpec::Builder::build() const
 {
     return handleExceptions(callObjectMethod("build", "()Landroid/security/KeyPairGeneratorSpec;"));
 }
@@ -376,7 +326,7 @@ X500Principal::X500Principal(const QString &name)
     handleExceptions();
 }
 
-Certificate KeyStore::PrivateKeyEntry::getCertificate() const
+java::lang::Object KeyStore::PrivateKeyEntry::getCertificate() const
 {
     return handleExceptions(
             callObjectMethod("getCertificate", "()Ljava/security/cert/Certificate;"));
@@ -387,7 +337,7 @@ PrivateKey KeyStore::PrivateKeyEntry::getPrivateKey() const
     return handleExceptions(callObjectMethod("getPrivateKey", "()Ljava/security/PrivateKey;"));
 }
 
-PublicKey Certificate::getPublicKey() const
+PublicKey javax::security::cert::Certificate::getPublicKey() const
 {
     return handleExceptions(callObjectMethod("getPublicKey", "()Ljava/security/PublicKey;"));
 }
@@ -455,12 +405,33 @@ bool Cipher::init(int opMode, const Key &key) const
     return handleExceptions();
 }
 
+bool Cipher::init(int opMode, const Key &key, const java::lang::Object &params) const
+{
+    callMethod<void>("init", "(ILjava/security/Key;Ljava/security/spec/AlgorithmParameterSpec;)V",
+                     opMode, key.object(), params.object());
+    return handleExceptions();
+}
+
 QByteArray Cipher::doFinal(const QByteArray &input) const
 {
     const QAndroidJniObject result = callObjectMethod("doFinal", "([B)[B", toArray(input).object());
     if (!handleExceptions())
         return QByteArray();
     return fromArray(static_cast<jbyteArray>(result.object()));
+}
+
+QByteArray Cipher::getIV() const
+{
+    const QAndroidJniObject result = callObjectMethod("getIV", "()[B");
+    if (!handleExceptions() || !result.isValid())
+        return QByteArray();
+    return fromArray(static_cast<jbyteArray>(result.object()));
+}
+
+javax::crypto::spec::IvParameterSpec::IvParameterSpec(const QByteArray &iv)
+    : java::lang::Object(
+              QAndroidJniObject("javax/crypto/spec/IvParameterSpec", "([B)V", toArray(iv).object()))
+{
 }
 
 CipherOutputStream::CipherOutputStream(const OutputStream &stream, const Cipher &cipher)
@@ -476,5 +447,53 @@ CipherInputStream::CipherInputStream(const InputStream &stream, const Cipher &ci
                                           "(Ljava/io/InputStream;Ljavax/crypto/Cipher;)V",
                                           stream.object(), cipher.object()))
 {
+    handleExceptions();
+}
+
+android::hardware::biometrics::BiometricPrompt::CryptoObject::CryptoObject(const javax::crypto::Cipher &cipher)
+    : Object(QAndroidJniObject("android/hardware/biometrics/BiometricPrompt$CryptoObject",
+                               "(Ljavax/crypto/Cipher;)V", cipher.object()))
+{
+    handleExceptions();
+}
+
+android::hardware::biometrics::BiometricPrompt::Builder::Builder(const android::content::Context &context)
+    : Object(QAndroidJniObject("android/hardware/biometrics/BiometricPrompt$Builder",
+                               "(Landroid/content/Context;)V", context.object()))
+{
+    handleExceptions();
+}
+
+android::hardware::biometrics::BiometricPrompt::Builder
+android::hardware::biometrics::BiometricPrompt::Builder::setTitle(const QString &title) const
+{
+    return handleExceptions(callObjectMethod(
+            "setTitle", "(Ljava/lang/CharSequence;)Landroid/hardware/biometrics/BiometricPrompt$Builder;",
+            fromString(title).object()));
+}
+
+android::hardware::biometrics::BiometricPrompt::Builder
+android::hardware::biometrics::BiometricPrompt::Builder::setNegativeButton(
+        const QString &text, const java::lang::Object &executor, jobject listener) const
+{
+    return handleExceptions(callObjectMethod(
+            "setNegativeButton",
+            "(Ljava/lang/CharSequence;Ljava/util/concurrent/Executor;Landroid/content/DialogInterface$OnClickListener;)Landroid/hardware/biometrics/BiometricPrompt$Builder;",
+            fromString(text).object(), executor.object(), listener));
+}
+
+android::hardware::biometrics::BiometricPrompt
+android::hardware::biometrics::BiometricPrompt::Builder::build() const
+{
+    return handleExceptions(callObjectMethod("build", "()Landroid/hardware/biometrics/BiometricPrompt;"));
+}
+
+void android::hardware::biometrics::BiometricPrompt::authenticate(
+        const CryptoObject &crypto, jobject cancellationSignal, const java::lang::Object &executor,
+        const AuthenticationCallback &callback) const
+{
+    callMethod<void>("authenticate",
+                     "(Landroid/hardware/biometrics/BiometricPrompt$CryptoObject;Landroid/os/CancellationSignal;Ljava/util/concurrent/Executor;Landroid/hardware/biometrics/BiometricPrompt$AuthenticationCallback;)V",
+                     crypto.object(), cancellationSignal, executor.object(), callback.object());
     handleExceptions();
 }

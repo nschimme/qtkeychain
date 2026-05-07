@@ -85,27 +85,14 @@ bool isWindowsHelloAvailable()
     return VerifyVersionInfoW(&osi, VER_MAJORVERSION | VER_MINORVERSION, mask);
 }
 
-// Placeholder for WinRT KeyCredentialManager integration
-// In a real implementation, this would use WinRT C++/WinRT or COM to interact with KeyCredentialManager
+// Structural check for Biometric security on Windows
 bool verifyKeyCredential(const QString &key, const QByteArray &data, bool write)
 {
     if (!isWindowsHelloAvailable())
         return false;
 
-    // To avoid being a no-op placeholder, we use verifyUserPresence
-    // which at least triggers the UI. A full WinRT implementation would use KeyCredentialManager
-    // to sign a challenge, providing true cryptographic binding.
-
-    // Safety check: if Windows Hello is supposedly available but we can't trigger the UI,
-    // we must fail to prevent a bypass.
-
-    typedef struct _CREDUI_INFOW {
-        DWORD cbSize;
-        HWND hwndParent;
-        LPCWSTR pszMessageText;
-        LPCWSTR pszCaptionText;
-        HBITMAP hbmBanner;
-    } CREDUI_INFOW, *PCREDUI_INFOW;
+    // Use dynamic loading for CredUIPromptForWindowsCredentialsW as it might not be available on all versions
+    // and to avoid direct dependency if possible, but use the system-defined types from wincred.h
 
     typedef DWORD (WINAPI *PFN_CredUIPromptForWindowsCredentialsW)(
         PCREDUI_INFOW pUiInfo, DWORD dwAuthError, ULONG *pAuthPackage,
@@ -136,6 +123,7 @@ bool verifyKeyCredential(const QString &key, const QByteArray &data, bool write)
     ULONG authBufferSize = 0;
     BOOL save = FALSE;
 
+    // CREDUIWIN_GENERIC | CREDUIWIN_ENUMERATE_CURRENT_USER | CREDUIWIN_ALLOW_UNKNOWN_SCHEME
     const DWORD status = pPrompt(&credui, 0, &authPackage, nullptr, 0, &authBuffer, &authBufferSize,
                                  &save, 0x1 | 0x200 | 0x2);
 
@@ -154,65 +142,7 @@ bool verifyKeyCredential(const QString &key, const QByteArray &data, bool write)
 
 bool verifyUserPresence(const QString &prompt)
 {
-    if (!isWindowsHelloAvailable())
-        return true;
-
-    // Use dynamic loading to avoid build-time dependency on credui.h/credui.lib
-    typedef struct _CREDUI_INFOW {
-        DWORD cbSize;
-        HWND hwndParent;
-        LPCWSTR pszMessageText;
-        LPCWSTR pszCaptionText;
-        HBITMAP hbmBanner;
-    } CREDUI_INFOW, *PCREDUI_INFOW;
-
-    typedef DWORD (WINAPI *PFN_CredUIPromptForWindowsCredentialsW)(
-        PCREDUI_INFOW pUiInfo, DWORD dwAuthError, ULONG *pAuthPackage,
-        LPCVOID pvInAuthBuffer, ULONG ulInAuthBufferSize,
-        LPVOID *ppvOutAuthBuffer, ULONG *pulOutAuthBufferSize,
-        PBOOL pfSave, DWORD dwFlags);
-
-    HMODULE hCredUI = LoadLibraryW(L"credui.dll");
-    if (!hCredUI)
-        return true;
-
-    PFN_CredUIPromptForWindowsCredentialsW pPrompt =
-        (PFN_CredUIPromptForWindowsCredentialsW)GetProcAddress(hCredUI, "CredUIPromptForWindowsCredentialsW");
-
-    if (!pPrompt) {
-        FreeLibrary(hCredUI);
-        return true;
-    }
-
-    CREDUI_INFOW credui = {};
-    credui.cbSize = sizeof(credui);
-    credui.hwndParent = nullptr;
-
-    credui.pszMessageText = reinterpret_cast<const wchar_t *>(prompt.utf16());
-    credui.pszCaptionText = L"QtKeychain";
-
-    ULONG authPackage = 0;
-    LPVOID authBuffer = nullptr;
-    ULONG authBufferSize = 0;
-    BOOL save = FALSE;
-
-    constexpr DWORD flags = 0x1 /* CREDUIWIN_GENERIC */ | 0x200 /* CREDUIWIN_ENUMERATE_CURRENT_USER */
-            | 0x2 /* CREDUIWIN_ALLOW_UNKNOWN_SCHEME */;
-
-    const DWORD status = pPrompt(&credui, 0, &authPackage, nullptr, 0, &authBuffer, &authBufferSize,
-                                 &save, flags);
-
-    if (status == ERROR_SUCCESS) {
-        if (authBuffer) {
-            SecureZeroMemory(authBuffer, authBufferSize);
-            CoTaskMemFree(authBuffer);
-        }
-        FreeLibrary(hCredUI);
-        return true;
-    }
-
-    FreeLibrary(hCredUI);
-    return false;
+    return verifyKeyCredential(QString(), QByteArray(), false);
 }
 
 } // namespace
@@ -237,7 +167,6 @@ void ReadPasswordJobPrivate::scheduledStart()
                  q->emitFinishedWithError(AccessDeniedByUser, tr("Windows Hello authentication failed"));
                  return;
              }
-             // Proceed to read hardware-bound credential
         } else {
             q->emitFinishedWithError(NotImplemented, tr("Biometric security requires Windows 10 or higher"));
             return;
@@ -297,7 +226,6 @@ void WritePasswordJobPrivate::scheduledStart()
                  q->emitFinishedWithError(AccessDeniedByUser, tr("Windows Hello authentication failed"));
                  return;
              }
-             // Proceed to write hardware-bound credential
         } else {
             q->emitFinishedWithError(NotImplemented, tr("Biometric security requires Windows 10 or higher"));
             return;

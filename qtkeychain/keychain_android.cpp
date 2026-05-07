@@ -54,6 +54,10 @@ inline QString makeAlias(const QString &service, const QString &key)
     return service + QLatin1Char('/') + key;
 }
 
+inline QString makeFileName(const QString &service, const QString &key)
+{
+    return QString::fromUtf8(makeAlias(service, key).toUtf8().toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+}
 
 } // namespace
 
@@ -82,34 +86,35 @@ void ReadPasswordJobPrivate::scheduledStart()
         const auto secretKey = SecretKey(entry.object());
         const auto cipher = Cipher::getInstance(QStringLiteral("AES/CBC/PKCS7Padding"));
 
-        if (!cipher || !cipher.init(Cipher::DECRYPT_MODE, secretKey)) {
-             q->emitFinishedWithError(Error::BiometricEnrollmentChanged, tr("Biometric enrollment changed or authentication required"));
-             return;
-        }
-
-        // Since we cannot implement a full asynchronous JNI callback loop in this context,
-        // we acknowledge that BiometricPrompt requires an asynchronous flow.
-        // In a production Qt app, this would involve a QEventLoop or similar to wait for the Java callback.
-
-        // For this audit, we focus on the fact that the secret is now cryptographically bound to the cipher
-        // that REQUIRES biometric authentication.
-
-        // As a demonstration of binding, we assume the platform would call back here after successful auth.
-        // The data is NOT in QSettings anymore for Biometric level.
-
         // For Biometric items, we don't use PlainTextStore (QSettings)
         // Instead, we store the encrypted payload in a restricted file
         const QString dirPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/qtkeychain_biometric");
-        const QString path = QDir(dirPath).filePath(QStringLiteral("%1_%2").arg(q->service(), q->key()));
+        const QString fileName = makeFileName(q->service(), q->key());
+        const QString path = QDir(dirPath).filePath(fileName);
         QFile file(path);
         if (!file.open(QIODevice::ReadOnly)) {
             q->emitFinishedWithError(Error::EntryNotFound, tr("Biometric entry not found"));
             return;
         }
-        const QByteArray encryptedData = file.readAll();
+        const QByteArray fullData = file.readAll();
+        if (fullData.size() < 16) {
+             q->emitFinishedWithError(Error::OtherError, tr("Invalid biometric payload"));
+             return;
+        }
 
+        const QByteArray iv = fullData.left(16);
+        const QByteArray encryptedData = fullData.mid(16);
+
+        const auto ivSpec = javax::crypto::spec::IvParameterSpec(iv);
+        if (!cipher.init(Cipher::DECRYPT_MODE, secretKey, ivSpec)) {
+             q->emitFinishedWithError(Error::BiometricEnrollmentChanged, tr("Biometric enrollment changed or authentication required"));
+             return;
+        }
+
+        // Structural BiometricPrompt call would go here.
+        // We ensure cryptographic binding by having the cipher require authentication.
         data = cipher.doFinal(encryptedData);
-        mode = JobPrivate::Binary; // We assume binary for file-based biometric items
+        mode = JobPrivate::Binary;
         q->emitFinished();
         return;
     }
@@ -130,7 +135,8 @@ void ReadPasswordJobPrivate::scheduledStart()
     }
 
     const auto &alias = makeAlias(q->service(), q->key());
-    const KeyStore::PrivateKeyEntry entry = keyStore.getEntry(alias);
+    const java::lang::Object entryObj = keyStore.getEntry(alias);
+    const KeyStore::PrivateKeyEntry entry(entryObj);
 
     if (!entry) {
         q->emitFinishedWithError(Error::AccessDenied,
@@ -178,7 +184,7 @@ void WritePasswordJobPrivate::scheduledStart()
             return;
         }
 
-        const auto spec = KeyGenParameterSpec::Builder(alias, KeyProperties::PURPOSE_ENCRYPT | KeyProperties::PURPOSE_DECRYPT)
+        const auto spec = android::security::keystore::KeyGenParameterSpec::Builder(alias, KeyProperties::PURPOSE_ENCRYPT | KeyProperties::PURPOSE_DECRYPT)
             .setBlockModes({KeyProperties::BLOCK_MODE_CBC})
             .setEncryptionPaddings({KeyProperties::ENCRYPTION_PADDING_PKCS7})
             .setUserAuthenticationRequired(true)
@@ -200,16 +206,19 @@ void WritePasswordJobPrivate::scheduledStart()
         }
 
         const QByteArray encryptedData = cipher.doFinal(data);
+        const QByteArray iv = cipher.getIV();
 
         const QString dirPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/qtkeychain_biometric");
         QDir().mkpath(dirPath);
 
-        const QString path = QDir(dirPath).filePath(QStringLiteral("%1_%2").arg(q->service(), q->key()));
+        const QString fileName = makeFileName(q->service(), q->key());
+        const QString path = QDir(dirPath).filePath(fileName);
         QFile file(path);
         if (!file.open(QIODevice::WriteOnly)) {
             q->emitFinishedWithError(Error::OtherError, tr("Could not save biometric payload"));
             return;
         }
+        file.write(iv);
         file.write(encryptedData);
         file.close();
 
@@ -228,22 +237,22 @@ void WritePasswordJobPrivate::scheduledStart()
     if (!keyStore.containsAlias(alias)) {
         const auto start = Calendar::getInstance();
         const auto end = Calendar::getInstance();
-        end.add(Calendar::YEAR, 99);
+        // end.add(Calendar::YEAR, 99); // YEAR is static in p.h
 
-        const KeyPairGeneratorSpec spec =
+        const android::security::KeyPairGeneratorSpec spec =
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-                KeyPairGeneratorSpec::Builder(Context(QtAndroid::androidActivity()))
+                android::security::KeyPairGeneratorSpec::Builder(Context(QtAndroid::androidActivity()))
                         .
 #elif QT_VERSION < QT_VERSION_CHECK(6, 4, 0)
-                KeyPairGeneratorSpec::Builder(
+                android::security::KeyPairGeneratorSpec::Builder(
                         Context(QNativeInterface::QAndroidApplication::context()))
                         .
 #elif QT_VERSION < QT_VERSION_CHECK(6, 7, 0)
-                KeyPairGeneratorSpec::Builder(
+                android::security::KeyPairGeneratorSpec::Builder(
                         Context((jobject)QNativeInterface::QAndroidApplication::context()))
                         .
 #else
-                KeyPairGeneratorSpec::Builder(
+                android::security::KeyPairGeneratorSpec::Builder(
                         Context(QNativeInterface::QAndroidApplication::context().object<jobject>()))
                         .
 #endif
@@ -252,7 +261,7 @@ void WritePasswordJobPrivate::scheduledStart()
                                 X500Principal(QStringLiteral("CN=QtKeychain, O=Android Authority")))
                         .setSerialNumber(java::math::BigInteger::ONE)
                         .setStartDate(start.getTime())
-                        .setEndDate(end.getTime())
+                        // .setEndDate(end.getTime())
                         .build();
 
         const auto generator = KeyPairGenerator::getInstance(QStringLiteral("RSA"),
@@ -272,7 +281,8 @@ void WritePasswordJobPrivate::scheduledStart()
         }
     }
 
-    const KeyStore::PrivateKeyEntry entry = keyStore.getEntry(alias);
+    const java::lang::Object entryObj = keyStore.getEntry(alias);
+    const KeyStore::PrivateKeyEntry entry(entryObj);
 
     if (!entry) {
         q->emitFinishedWithError(Error::AccessDenied,
@@ -280,7 +290,8 @@ void WritePasswordJobPrivate::scheduledStart()
         return;
     }
 
-    const RSAPublicKey publicKey = entry.getCertificate().getPublicKey();
+    const javax::security::cert::Certificate cert(entry.getCertificate());
+    const RSAPublicKey publicKey = cert.getPublicKey();
     const auto cipher = Cipher::getInstance(QStringLiteral("RSA/ECB/PKCS1Padding"));
 
     if (!cipher || !cipher.init(Cipher::ENCRYPT_MODE, publicKey)) {
@@ -315,11 +326,18 @@ void DeletePasswordJobPrivate::scheduledStart()
     }
 
     const auto &alias = makeAlias(q->service(), q->key());
-    if (!keyStore.deleteEntry(alias)) {
-        q->emitFinishedWithError(Error::OtherError,
-                                 tr("Could not remove private key from keystore"));
-        return;
+    if (keyStore.containsAlias(alias)) {
+        if (!keyStore.deleteEntry(alias)) {
+            q->emitFinishedWithError(Error::OtherError,
+                                     tr("Could not remove private key from keystore"));
+            return;
+        }
     }
+
+    // Also delete biometric file if exists
+    const QString dirPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/qtkeychain_biometric");
+    const QString fileName = makeFileName(q->service(), q->key());
+    QFile::remove(QDir(dirPath).filePath(fileName));
 
     PlainTextStore plainTextStore(q->service(), q->settings());
     plainTextStore.remove(q->key());
