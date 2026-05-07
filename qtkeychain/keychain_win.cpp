@@ -85,19 +85,14 @@ bool isWindowsHelloAvailable()
     return VerifyVersionInfoW(&osi, VER_MAJORVERSION | VER_MINORVERSION, mask);
 }
 
-bool verifyUserPresence(const QString &prompt)
+// Structural check for Biometric security on Windows
+bool verifyKeyCredential(const QString &key, const QByteArray &data, bool write)
 {
     if (!isWindowsHelloAvailable())
-        return true;
+        return false;
 
-    // Use dynamic loading to avoid build-time dependency on credui.h/credui.lib
-    typedef struct _CREDUI_INFOW {
-        DWORD cbSize;
-        HWND hwndParent;
-        LPCWSTR pszMessageText;
-        LPCWSTR pszCaptionText;
-        HBITMAP hbmBanner;
-    } CREDUI_INFOW, *PCREDUI_INFOW;
+    // Use dynamic loading for CredUIPromptForWindowsCredentialsW as it might not be available on all versions
+    // and to avoid direct dependency if possible, but use the system-defined types from wincred.h
 
     typedef DWORD (WINAPI *PFN_CredUIPromptForWindowsCredentialsW)(
         PCREDUI_INFOW pUiInfo, DWORD dwAuthError, ULONG *pAuthPackage,
@@ -107,21 +102,20 @@ bool verifyUserPresence(const QString &prompt)
 
     HMODULE hCredUI = LoadLibraryW(L"credui.dll");
     if (!hCredUI)
-        return true;
+        return false;
 
     PFN_CredUIPromptForWindowsCredentialsW pPrompt =
         (PFN_CredUIPromptForWindowsCredentialsW)GetProcAddress(hCredUI, "CredUIPromptForWindowsCredentialsW");
 
     if (!pPrompt) {
         FreeLibrary(hCredUI);
-        return true;
+        return false;
     }
 
     CREDUI_INFOW credui = {};
     credui.cbSize = sizeof(credui);
     credui.hwndParent = nullptr;
-
-    credui.pszMessageText = reinterpret_cast<const wchar_t *>(prompt.utf16());
+    credui.pszMessageText = L"Access to secure keychain item";
     credui.pszCaptionText = L"QtKeychain";
 
     ULONG authPackage = 0;
@@ -129,11 +123,9 @@ bool verifyUserPresence(const QString &prompt)
     ULONG authBufferSize = 0;
     BOOL save = FALSE;
 
-    constexpr DWORD flags = 0x1 /* CREDUIWIN_GENERIC */ | 0x200 /* CREDUIWIN_ENUMERATE_CURRENT_USER */
-            | 0x2 /* CREDUIWIN_ALLOW_UNKNOWN_SCHEME */;
-
+    // CREDUIWIN_GENERIC | CREDUIWIN_ENUMERATE_CURRENT_USER | CREDUIWIN_ALLOW_UNKNOWN_SCHEME
     const DWORD status = pPrompt(&credui, 0, &authPackage, nullptr, 0, &authBuffer, &authBufferSize,
-                                 &save, flags);
+                                 &save, 0x1 | 0x200 | 0x2);
 
     if (status == ERROR_SUCCESS) {
         if (authBuffer) {
@@ -146,6 +138,11 @@ bool verifyUserPresence(const QString &prompt)
 
     FreeLibrary(hCredUI);
     return false;
+}
+
+bool verifyUserPresence(const QString &prompt)
+{
+    return verifyKeyCredential(QString(), QByteArray(), false);
 }
 
 } // namespace
@@ -165,8 +162,13 @@ bool verifyUserPresence(const QString &prompt)
 void ReadPasswordJobPrivate::scheduledStart()
 {
     if (securityLevel == Job::Biometric) {
-        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
-            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+        if (isWindowsHelloAvailable()) {
+             if (!verifyKeyCredential(key, {}, false)) {
+                 q->emitFinishedWithError(AccessDeniedByUser, tr("Windows Hello authentication failed"));
+                 return;
+             }
+        } else {
+            q->emitFinishedWithError(NotImplemented, tr("Biometric security requires Windows 10 or higher"));
             return;
         }
     }
@@ -219,8 +221,13 @@ void ReadPasswordJobPrivate::scheduledStart()
 void WritePasswordJobPrivate::scheduledStart()
 {
     if (securityLevel == Job::Biometric) {
-        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
-            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+        if (isWindowsHelloAvailable()) {
+             if (!verifyKeyCredential(key, data, true)) {
+                 q->emitFinishedWithError(AccessDeniedByUser, tr("Windows Hello authentication failed"));
+                 return;
+             }
+        } else {
+            q->emitFinishedWithError(NotImplemented, tr("Biometric security requires Windows 10 or higher"));
             return;
         }
     }

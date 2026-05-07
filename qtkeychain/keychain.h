@@ -35,6 +35,7 @@ enum Error {
     AccessDenied, /**< Access denied for other reasons */
     NoBackendAvailable, /**< No platform-specific keychain service available */
     NotImplemented, /**< Not implemented on platform */
+    BiometricEnrollmentChanged, /**< Biometric enrollment has changed, invalidating the secret. @since 0.15 */
     OtherError /**< Something else went wrong (errorString() might provide details) */
 };
 
