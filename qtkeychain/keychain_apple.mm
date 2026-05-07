@@ -153,15 +153,21 @@ struct ErrorDescription
 @end
 
 static void StartReadPassword(const QString &service, const QString &key,
+                              QKeychain::Job::SecurityLevel securityLevel,
                               AppleKeychainInterface *const interface)
 {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-        NSDictionary *const query = @{
+        NSMutableDictionary *const query = [NSMutableDictionary dictionaryWithDictionary:@{
             (__bridge NSString *)kSecClass : (__bridge NSString *)kSecClassGenericPassword,
             (__bridge NSString *)kSecAttrService : service.toNSString(),
             (__bridge NSString *)kSecAttrAccount : key.toNSString(),
             (__bridge NSString *)kSecReturnData : @YES,
-        };
+        }];
+
+        if (securityLevel == QKeychain::Job::Biometric) {
+            const auto prompt = Job::tr("Authenticate to access %1").arg(service);
+            [query setObject:prompt.toNSString() forKey:(__bridge NSString *)kSecUseOperationPrompt];
+        }
 
         CFTypeRef dataRef = nil;
         const OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &dataRef);
@@ -190,6 +196,7 @@ static void StartReadPassword(const QString &service, const QString &key,
 }
 
 static void StartWritePassword(const QString &service, const QString &key, const QByteArray &data,
+                               QKeychain::Job::SecurityLevel securityLevel,
                                AppleKeychainInterface *const interface)
 {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
@@ -199,24 +206,61 @@ static void StartWritePassword(const QString &service, const QString &key, const
             (__bridge NSString *)kSecAttrAccount : key.toNSString(),
         };
 
+        CFErrorRef error = nil;
+        SecAccessControlRef accessControl = nil;
+
+        if (securityLevel == QKeychain::Job::Biometric) {
+            accessControl = SecAccessControlCreateWithFlags(
+                    kCFAllocatorDefault, kSecAttrAccessibleWhenUnlocked,
+                    kSecAccessControlUserPresence, &error);
+        }
+
         OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, nil);
 
         if (status == errSecSuccess) {
-            NSDictionary *const update = @{
+            NSMutableDictionary *const update = [NSMutableDictionary dictionaryWithDictionary:@{
                 (__bridge NSString *)kSecValueData : data.toNSData(),
-            };
+            }];
+
+            if (accessControl) {
+                [update setObject:(__bridge id)accessControl
+                           forKey:(__bridge NSString *)kSecAttrAccessControl];
+                // Remove kSecAttrAccessible if it exists on the current item
+                [update setObject:(__bridge id)kCFNull forKey:(__bridge NSString *)kSecAttrAccessible];
+            } else {
+                [update setObject:(__bridge id)kSecAttrAccessibleWhenUnlocked
+                           forKey:(__bridge NSString *)kSecAttrAccessible];
+                // Remove kSecAttrAccessControl if it exists on the current item
+                [update setObject:(__bridge id)kCFNull
+                           forKey:(__bridge NSString *)kSecAttrAccessControl];
+            }
 
             status = SecItemUpdate((__bridge CFDictionaryRef)query,
                                    (__bridge CFDictionaryRef)update);
         } else {
-            NSDictionary *const insert = @{
+            NSMutableDictionary *const insert = [NSMutableDictionary dictionaryWithDictionary:@{
                 (__bridge NSString *)kSecClass : (__bridge NSString *)kSecClassGenericPassword,
                 (__bridge NSString *)kSecAttrService : service.toNSString(),
                 (__bridge NSString *)kSecAttrAccount : key.toNSString(),
                 (__bridge NSString *)kSecValueData : data.toNSData(),
-            };
+            }];
+
+            if (accessControl) {
+                [insert setObject:(__bridge id)accessControl
+                           forKey:(__bridge NSString *)kSecAttrAccessControl];
+            } else {
+                [insert setObject:(__bridge id)kSecAttrAccessibleWhenUnlocked
+                           forKey:(__bridge NSString *)kSecAttrAccessible];
+            }
 
             status = SecItemAdd((__bridge const CFDictionaryRef)insert, nil);
+        }
+
+        if (accessControl) {
+            CFRelease(accessControl);
+        }
+        if (error) {
+            CFRelease(error);
         }
 
         if (status == errSecSuccess) {
@@ -268,14 +312,14 @@ void ReadPasswordJobPrivate::scheduledStart()
 {
     AppleKeychainInterface *const interface = [[AppleKeychainInterface alloc] initWithJob:q
                                                                             andPrivateJob:this];
-    StartReadPassword(service, key, interface);
+    StartReadPassword(service, key, securityLevel, interface);
 }
 
 void WritePasswordJobPrivate::scheduledStart()
 {
     AppleKeychainInterface *const interface = [[AppleKeychainInterface alloc] initWithJob:q
                                                                             andPrivateJob:this];
-    StartWritePassword(service, key, data, interface);
+    StartWritePassword(service, key, data, securityLevel, interface);
 }
 
 void DeletePasswordJobPrivate::scheduledStart()

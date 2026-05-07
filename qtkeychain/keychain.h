@@ -142,6 +142,30 @@ public:
      */
     void setKey(const QString &key);
 
+    /**
+     * Security level for the keychain item.
+     * @since 0.15
+     */
+    enum SecurityLevel {
+        Standard, /**< Standard security level. No additional authentication required if the keychain is unlocked. */
+        Biometric /**< Biometric security level. Requires Touch ID, Face ID or device passcode. */
+    };
+
+    /**
+     * @return The security level for the keychain item.
+     * @see setSecurityLevel()
+     * @since 0.15
+     */
+    SecurityLevel securityLevel() const;
+
+    /**
+     * Set the security level for the keychain item.
+     * On Apple platforms, this defaults to Biometric if the library is built with APPLE_LOCALAUTHENTICATION.
+     * @see securityLevel()
+     * @since 0.15
+     */
+    void setSecurityLevel(SecurityLevel level);
+
     void emitFinished();
     void emitFinishedWithError(Error, const QString &errorString);
 

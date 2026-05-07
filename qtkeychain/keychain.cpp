@@ -133,6 +133,16 @@ void Job::setKey(const QString &key_)
     d->key = key_;
 }
 
+Job::SecurityLevel Job::securityLevel() const
+{
+    return d->securityLevel;
+}
+
+void Job::setSecurityLevel(SecurityLevel level)
+{
+    d->securityLevel = level;
+}
+
 WritePasswordJob::WritePasswordJob(const QString &service, QObject *parent)
     : Job(new WritePasswordJobPrivate(service, this), parent)
 {
@@ -225,7 +235,12 @@ JobPrivate::JobPrivate(const QString &service_, Job *qq)
       error(NoError),
       service(service_),
       autoDelete(true),
-      insecureFallback(false)
+      insecureFallback(false),
+#if defined(Q_OS_APPLE)
+      securityLevel(Job::Biometric)
+#else
+      securityLevel(Job::Standard)
+#endif
 {
 }
 

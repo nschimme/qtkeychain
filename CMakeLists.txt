@@ -56,6 +56,7 @@ if (WIN32)
     endif()
 endif()
 
+
 if( NOT BUILD_WITH_QT6 )
     find_package(Qt5 COMPONENTS Core REQUIRED)
 endif()
