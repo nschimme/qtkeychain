@@ -41,7 +41,7 @@ endif()
 
 if(APPLE)
     list(APPEND qtkeychain_SOURCES keychain_apple.mm)
-    list(APPEND qtkeychain_LIBRARIES "-framework Foundation" "-framework Security")
+    list(APPEND qtkeychain_LIBRARIES "-framework Foundation" "-framework Security" "-framework LocalAuthentication")
 endif()
 
 if(HAIKU)

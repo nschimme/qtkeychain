@@ -13,6 +13,7 @@
 #include <windows.h>
 #include <wincred.h>
 #include <wincrypt.h>
+#include <winuser.h>
 
 #include <cmath>
 #include <memory>
@@ -73,6 +74,80 @@ std::pair<QByteArray, QString> protectData(const QByteArray &data)
     return { encrypted, {} };
 }
 
+bool isWindowsHelloAvailable()
+{
+    // Heuristic: check if Windows 10 or newer
+    OSVERSIONINFOEXW osi = { sizeof(osi), 10, 0, 0, 0, {0}, 0, 0, 0, 0, 0 };
+    DWORDLONG mask = 0;
+    VER_SET_CONDITION(mask, VER_MAJORVERSION, VER_GREATER_EQUAL);
+    VER_SET_CONDITION(mask, VER_MINORVERSION, VER_GREATER_EQUAL);
+
+    return VerifyVersionInfoW(&osi, VER_MAJORVERSION | VER_MINORVERSION, mask);
+}
+
+bool verifyUserPresence(const QString &prompt)
+{
+    if (!isWindowsHelloAvailable())
+        return true;
+
+    // Use dynamic loading to avoid build-time dependency on credui.h/credui.lib
+    typedef struct _CREDUI_INFOW {
+        DWORD cbSize;
+        HWND hwndParent;
+        LPCWSTR pszMessageText;
+        LPCWSTR pszCaptionText;
+        HBITMAP hbmBanner;
+    } CREDUI_INFOW, *PCREDUI_INFOW;
+
+    typedef DWORD (WINAPI *PFN_CredUIPromptForWindowsCredentialsW)(
+        PCREDUI_INFOW pUiInfo, DWORD dwAuthError, ULONG *pAuthPackage,
+        LPCVOID pvInAuthBuffer, ULONG ulInAuthBufferSize,
+        LPVOID *ppvOutAuthBuffer, ULONG *pulOutAuthBufferSize,
+        PBOOL pfSave, DWORD dwFlags);
+
+    HMODULE hCredUI = LoadLibraryW(L"credui.dll");
+    if (!hCredUI)
+        return true;
+
+    PFN_CredUIPromptForWindowsCredentialsW pPrompt =
+        (PFN_CredUIPromptForWindowsCredentialsW)GetProcAddress(hCredUI, "CredUIPromptForWindowsCredentialsW");
+
+    if (!pPrompt) {
+        FreeLibrary(hCredUI);
+        return true;
+    }
+
+    CREDUI_INFOW credui = {};
+    credui.cbSize = sizeof(credui);
+    credui.hwndParent = nullptr;
+
+    credui.pszMessageText = reinterpret_cast<const wchar_t *>(prompt.utf16());
+    credui.pszCaptionText = L"QtKeychain";
+
+    ULONG authPackage = 0;
+    LPVOID authBuffer = nullptr;
+    ULONG authBufferSize = 0;
+    BOOL save = FALSE;
+
+    constexpr DWORD flags = 0x1 /* CREDUIWIN_GENERIC */ | 0x200 /* CREDUIWIN_ENUMERATE_CURRENT_USER */
+            | 0x2 /* CREDUIWIN_ALLOW_UNKNOWN_SCHEME */;
+
+    const DWORD status = pPrompt(&credui, 0, &authPackage, nullptr, 0, &authBuffer, &authBufferSize,
+                                 &save, flags);
+
+    if (status == ERROR_SUCCESS) {
+        if (authBuffer) {
+            SecureZeroMemory(authBuffer, authBufferSize);
+            CoTaskMemFree(authBuffer);
+        }
+        FreeLibrary(hCredUI);
+        return true;
+    }
+
+    FreeLibrary(hCredUI);
+    return false;
+}
+
 } // namespace
 
 #if defined(USE_CREDENTIAL_STORE)
@@ -89,6 +164,13 @@ std::pair<QByteArray, QString> protectData(const QByteArray &data)
  */
 void ReadPasswordJobPrivate::scheduledStart()
 {
+    if (securityLevel == Job::Biometric) {
+        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
+            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+            return;
+        }
+    }
+
     PCREDENTIALW cred = {};
 
     if (!CredReadW(reinterpret_cast<const wchar_t *>(key.utf16()), CRED_TYPE_GENERIC, 0, &cred)) {
@@ -136,6 +218,13 @@ void ReadPasswordJobPrivate::scheduledStart()
 
 void WritePasswordJobPrivate::scheduledStart()
 {
+    if (securityLevel == Job::Biometric) {
+        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
+            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+            return;
+        }
+    }
+
     CREDENTIALW cred = {};
     cred.Comment = const_cast<wchar_t *>(PRODUCT_NAME.data());
     cred.Type = CRED_TYPE_GENERIC;
@@ -214,6 +303,13 @@ void WritePasswordJobPrivate::scheduledStart()
 
 void DeletePasswordJobPrivate::scheduledStart()
 {
+    if (securityLevel == Job::Biometric) {
+        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
+            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+            return;
+        }
+    }
+
     if (!CredDeleteW(reinterpret_cast<const wchar_t *>(key.utf16()), CRED_TYPE_GENERIC, 0)) {
         Error err;
         QString msg;
@@ -236,6 +332,13 @@ void DeletePasswordJobPrivate::scheduledStart()
 #else
 void ReadPasswordJobPrivate::scheduledStart()
 {
+    if (securityLevel == Job::Biometric) {
+        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
+            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+            return;
+        }
+    }
+
     PlainTextStore plainTextStore(q->service(), q->settings());
     QByteArray encrypted = plainTextStore.readData(key);
     if (plainTextStore.error() != NoError) {
@@ -254,6 +357,13 @@ void ReadPasswordJobPrivate::scheduledStart()
 
 void WritePasswordJobPrivate::scheduledStart()
 {
+    if (securityLevel == Job::Biometric) {
+        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
+            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+            return;
+        }
+    }
+
     const auto result = protectData(data);
     if (!result.second.isEmpty()) {
         q->emitFinishedWithError(OtherError, tr("Encryption failed: %1").arg(result.second));
@@ -272,6 +382,13 @@ void WritePasswordJobPrivate::scheduledStart()
 
 void DeletePasswordJobPrivate::scheduledStart()
 {
+    if (securityLevel == Job::Biometric) {
+        if (!verifyUserPresence(q->defaultAuthenticationPrompt())) {
+            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+            return;
+        }
+    }
+
     PlainTextStore plainTextStore(q->service(), q->settings());
     plainTextStore.remove(key);
     if (plainTextStore.error() != NoError) {

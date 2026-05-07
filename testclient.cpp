@@ -21,11 +21,29 @@
 
 using namespace QKeychain;
 
+static Job::SecurityLevel parseSecurityLevel(QStringList::ConstIterator &it,
+                                             const QStringList::ConstIterator &end)
+{
+    if (it != end && *it == QLatin1String("--security-level")) {
+        if (++it == end)
+            return Job::Standard;
+        if (*it == QLatin1String("standard")) {
+            ++it;
+            return Job::Standard;
+        } else if (*it == QLatin1String("biometric")) {
+            ++it;
+            return Job::Biometric;
+        }
+    }
+    return Job::Standard;
+}
+
 static int printUsage()
 {
-    std::cerr << "testclient store <account> <password>" << std::endl;
-    std::cerr << "testclient restore <account>" << std::endl;
-    std::cerr << "testclient delete <account>" << std::endl;
+    std::cerr << "testclient store <account> <password> [--security-level standard|biometric]" << std::endl;
+    std::cerr << "testclient bstore <account> <password> [--security-level standard|biometric]" << std::endl;
+    std::cerr << "testclient restore <account> [--security-level standard|biometric]" << std::endl;
+    std::cerr << "testclient delete <account> [--security-level standard|biometric]" << std::endl;
     return 1;
 }
 
@@ -53,12 +71,20 @@ int main(int argc, char **argv)
         if (++it == args.constEnd())
             return printUsage();
         const QString pass = *it;
-        if (++it != args.constEnd())
+
+        const auto it_start = it;
+        const Job::SecurityLevel securityLevel = parseSecurityLevel(++it, args.constEnd());
+
+        if (it != args.constEnd())
             return printUsage();
+
         WritePasswordJob job(QLatin1String("qtkeychain-testclient"));
         job.setAutoDelete(false);
         job.setKey(acc);
         job.setTextData(pass);
+        if (it != it_start + 1) {
+            job.setSecurityLevel(securityLevel);
+        }
         QEventLoop loop;
         job.connect(&job, &Job::finished, &loop, &QEventLoop::quit);
         job.start();
@@ -75,12 +101,20 @@ int main(int argc, char **argv)
         if (++it == args.constEnd())
             return printUsage();
         const QString pass = *it;
-        if (++it != args.constEnd())
+
+        const auto it_start = it;
+        const Job::SecurityLevel securityLevel = parseSecurityLevel(++it, args.constEnd());
+
+        if (it != args.constEnd())
             return printUsage();
+
         WritePasswordJob job(QLatin1String("qtkeychain-testclient"));
         job.setAutoDelete(false);
         job.setKey(acc);
         job.setBinaryData(pass.toUtf8());
+        if (it != it_start + 1) {
+            job.setSecurityLevel(securityLevel);
+        }
         QEventLoop loop;
         job.connect(&job, &Job::finished, &loop, &QEventLoop::quit);
         job.start();
@@ -95,11 +129,19 @@ int main(int argc, char **argv)
         if (++it == args.constEnd())
             return printUsage();
         const QString acc = *it;
-        if (++it != args.constEnd())
+
+        const auto it_start = it;
+        const Job::SecurityLevel securityLevel = parseSecurityLevel(++it, args.constEnd());
+
+        if (it != args.constEnd())
             return printUsage();
+
         ReadPasswordJob job(QLatin1String("qtkeychain-testclient"));
         job.setAutoDelete(false);
         job.setKey(acc);
+        if (it != it_start + 1) {
+            job.setSecurityLevel(securityLevel);
+        }
         QEventLoop loop;
         job.connect(&job, &Job::finished, &loop, &QEventLoop::quit);
         job.start();
@@ -116,11 +158,19 @@ int main(int argc, char **argv)
         if (++it == args.constEnd())
             return printUsage();
         const QString acc = *it;
-        if (++it != args.constEnd())
+
+        const auto it_start = it;
+        const Job::SecurityLevel securityLevel = parseSecurityLevel(++it, args.constEnd());
+
+        if (it != args.constEnd())
             return printUsage();
+
         DeletePasswordJob job(QLatin1String("qtkeychain-testclient"));
         job.setAutoDelete(false);
         job.setKey(acc);
+        if (it != it_start + 1) {
+            job.setSecurityLevel(securityLevel);
+        }
         QEventLoop loop;
         job.connect(&job, &Job::finished, &loop, &QEventLoop::quit);
         job.start();

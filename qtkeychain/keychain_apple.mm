@@ -10,7 +10,14 @@
 #include "keychain_p.h"
 
 #import <Foundation/Foundation.h>
+#import <LocalAuthentication/LocalAuthentication.h>
 #import <Security/Security.h>
+
+/*
+ * Note for Face ID support:
+ * To use Face ID, apps using this library must include the NSFaceIDUsageDescription
+ * key in their Info.plist file.
+ */
 
 using namespace QKeychain;
 
@@ -92,6 +99,7 @@ struct ErrorDescription
 @interface AppleKeychainInterface () {
     QPointer<Job> _job;
     QPointer<JobPrivate> _privateJob;
+    LAContext *_context;
 }
 @end
 
@@ -103,21 +111,49 @@ struct ErrorDescription
     if (self) {
         _job = job;
         _privateJob = privateJob;
+        _context = [[LAContext alloc] init];
     }
     return self;
 }
 
 - (void)dealloc
 {
+    [_context release];
     [NSNotificationCenter.defaultCenter removeObserver:self];
     [super dealloc];
 }
+
+- (LAContext *)context
+{
+    return _context;
+}
+
+- (Job *)job
+{
+    return _job;
+}
+
+- (QKeychain::Job::SecurityLevel)effectiveSecurityLevel
+{
+    if (!_job || _job->securityLevel() != QKeychain::Job::Biometric) {
+        return QKeychain::Job::Standard;
+    }
+
+    NSError *error = nil;
+    if ([_context canEvaluatePolicy:LAPolicyDeviceOwnerAuthentication error:&error]) {
+        return QKeychain::Job::Biometric;
+    }
+
+    return QKeychain::Job::Standard;
+}
+
 
 - (void)keychainTaskFinished
 {
     if (_job) {
         _job->emitFinished();
     }
+    [self release];
 }
 
 - (void)keychainReadTaskFinished:(NSData *)retrievedData
@@ -133,6 +169,7 @@ struct ErrorDescription
     if (_job) {
         _job->emitFinished();
     }
+    [self release];
 }
 
 - (void)keychainTaskFinishedWithError:(OSStatus)status
@@ -148,6 +185,7 @@ struct ErrorDescription
     if (_job) {
         _job->emitFinishedWithError(error.code, fullMessage);
     }
+    [self release];
 }
 
 @end
@@ -155,13 +193,20 @@ struct ErrorDescription
 static void StartReadPassword(const QString &service, const QString &key,
                               AppleKeychainInterface *const interface)
 {
+    const auto securityLevel = [interface effectiveSecurityLevel];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-        NSDictionary *const query = @{
+        NSMutableDictionary *const query = [NSMutableDictionary dictionaryWithDictionary:@{
             (__bridge NSString *)kSecClass : (__bridge NSString *)kSecClassGenericPassword,
             (__bridge NSString *)kSecAttrService : service.toNSString(),
             (__bridge NSString *)kSecAttrAccount : key.toNSString(),
             (__bridge NSString *)kSecReturnData : @YES,
-        };
+        }];
+
+        if (securityLevel == QKeychain::Job::Biometric) {
+            const auto prompt = interface.job->defaultAuthenticationPrompt();
+            interface.context.localizedReason = prompt.toNSString();
+            [query setObject:[interface context] forKey:(__bridge NSString *)kSecUseAuthenticationContext];
+        }
 
         CFTypeRef dataRef = nil;
         const OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &dataRef);
@@ -171,15 +216,13 @@ static void StartReadPassword(const QString &service, const QString &key,
             NSData *const data = (__bridge NSData *)castedDataRef;
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainReadTaskFinished:data];
-                [interface release];
             });
         } else {
             NSString *const descriptiveErrorString =
-                    @"Could not retrieve private key from keystore";
+                    @"Could not retrieve password from keychain";
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainTaskFinishedWithError:status
                                       descriptiveMessage:descriptiveErrorString];
-                [interface release];
             });
         }
 
@@ -192,46 +235,107 @@ static void StartReadPassword(const QString &service, const QString &key,
 static void StartWritePassword(const QString &service, const QString &key, const QByteArray &data,
                                AppleKeychainInterface *const interface)
 {
+    const auto securityLevel = [interface effectiveSecurityLevel];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-        NSDictionary *const query = @{
+        NSMutableDictionary *const query = [NSMutableDictionary dictionaryWithDictionary:@{
             (__bridge NSString *)kSecClass : (__bridge NSString *)kSecClassGenericPassword,
             (__bridge NSString *)kSecAttrService : service.toNSString(),
             (__bridge NSString *)kSecAttrAccount : key.toNSString(),
-        };
+        }];
 
-        OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, nil);
+        if (securityLevel == QKeychain::Job::Biometric) {
+            const auto prompt = interface.job->defaultAuthenticationPrompt();
+            interface.context.localizedReason = prompt.toNSString();
+            [query setObject:[interface context] forKey:(__bridge NSString *)kSecUseAuthenticationContext];
+        }
+
+        CFErrorRef error = nil;
+        SecAccessControlRef accessControl = nil;
+
+        if (securityLevel == QKeychain::Job::Biometric) {
+            accessControl = SecAccessControlCreateWithFlags(
+                    kCFAllocatorDefault, kSecAttrAccessibleWhenUnlocked,
+                    kSecAccessControlUserPresence, &error);
+        }
+
+        OSStatus status = SecItemCopyMatching((__bridge const CFDictionaryRef)query, nil);
 
         if (status == errSecSuccess) {
-            NSDictionary *const update = @{
+            NSMutableDictionary *const update = [NSMutableDictionary dictionaryWithDictionary:@{
                 (__bridge NSString *)kSecValueData : data.toNSData(),
-            };
+            }];
 
-            status = SecItemUpdate((__bridge CFDictionaryRef)query,
-                                   (__bridge CFDictionaryRef)update);
-        } else {
-            NSDictionary *const insert = @{
+            if (accessControl) {
+                [update setObject:(__bridge id)accessControl
+                           forKey:(__bridge NSString *)kSecAttrAccessControl];
+                // Remove kSecAttrAccessible if it exists on the current item
+                [update setObject:(__bridge id)kCFNull forKey:(__bridge NSString *)kSecAttrAccessible];
+            } else {
+                [update setObject:(__bridge id)kSecAttrAccessibleWhenUnlocked
+                           forKey:(__bridge NSString *)kSecAttrAccessible];
+                // Remove kSecAttrAccessControl if it exists on the current item
+                [update setObject:(__bridge id)kCFNull
+                           forKey:(__bridge NSString *)kSecAttrAccessControl];
+            }
+
+            status = SecItemUpdate((__bridge const CFDictionaryRef)query,
+                                   (__bridge const CFDictionaryRef)update);
+
+            if (status == errSecSuccess) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [interface keychainTaskFinished];
+                });
+            } else {
+                NSString *const descriptiveErrorString = @"Could not store data in settings";
+
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [interface keychainTaskFinishedWithError:status
+                                          descriptiveMessage:descriptiveErrorString];
+                });
+            }
+        } else if (status == errSecItemNotFound) {
+            NSMutableDictionary *const insert = [NSMutableDictionary dictionaryWithDictionary:@{
                 (__bridge NSString *)kSecClass : (__bridge NSString *)kSecClassGenericPassword,
                 (__bridge NSString *)kSecAttrService : service.toNSString(),
                 (__bridge NSString *)kSecAttrAccount : key.toNSString(),
                 (__bridge NSString *)kSecValueData : data.toNSData(),
-            };
+            }];
+
+            if (accessControl) {
+                [insert setObject:(__bridge id)accessControl
+                           forKey:(__bridge NSString *)kSecAttrAccessControl];
+            } else {
+                [insert setObject:(__bridge id)kSecAttrAccessibleWhenUnlocked
+                           forKey:(__bridge NSString *)kSecAttrAccessible];
+            }
 
             status = SecItemAdd((__bridge const CFDictionaryRef)insert, nil);
-        }
 
-        if (status == errSecSuccess) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [interface keychainTaskFinished];
-                [interface release];
-            });
+            if (status == errSecSuccess) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [interface keychainTaskFinished];
+                });
+            } else {
+                NSString *const descriptiveErrorString = @"Could not store data in settings";
+
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [interface keychainTaskFinishedWithError:status
+                                          descriptiveMessage:descriptiveErrorString];
+                });
+            }
         } else {
             NSString *const descriptiveErrorString = @"Could not store data in settings";
-
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainTaskFinishedWithError:status
                                       descriptiveMessage:descriptiveErrorString];
-                [interface release];
             });
+        }
+
+        if (accessControl) {
+            CFRelease(accessControl);
+        }
+        if (error) {
+            CFRelease(error);
         }
     });
 }
@@ -239,26 +343,31 @@ static void StartWritePassword(const QString &service, const QString &key, const
 static void StartDeletePassword(const QString &service, const QString &key,
                                 AppleKeychainInterface *const interface)
 {
+    const auto securityLevel = [interface effectiveSecurityLevel];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-        NSDictionary *const query = @{
+        NSMutableDictionary *const query = [NSMutableDictionary dictionaryWithDictionary:@{
             (__bridge NSString *)kSecClass : (__bridge NSString *)kSecClassGenericPassword,
             (__bridge NSString *)kSecAttrService : service.toNSString(),
             (__bridge NSString *)kSecAttrAccount : key.toNSString(),
-        };
+        }];
 
-        const OSStatus status = SecItemDelete((__bridge CFDictionaryRef)query);
+        if (securityLevel == QKeychain::Job::Biometric) {
+            const auto prompt = interface.job->defaultAuthenticationPrompt();
+            interface.context.localizedReason = prompt.toNSString();
+            [query setObject:[interface context] forKey:(__bridge NSString *)kSecUseAuthenticationContext];
+        }
+
+        const OSStatus status = SecItemDelete((__bridge const CFDictionaryRef)query);
 
         if (status == errSecSuccess) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainTaskFinished];
-                [interface release];
             });
         } else {
-            NSString *const descriptiveErrorString = @"Could not remove private key from keystore";
+            NSString *const descriptiveErrorString = @"Could not remove password from keychain";
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainTaskFinishedWithError:status
                                       descriptiveMessage:descriptiveErrorString];
-                [interface release];
             });
         }
     });

@@ -46,6 +46,7 @@ private Q_SLOTS:
             for (const auto& username : usernames)
             {
                 QKeychain::WritePasswordJob writeJob(serviceKey);
+                writeJob.setSecurityLevel(QKeychain::Job::Standard);
                 writeJob.setKey(username);
                 writeJob.setBinaryData(username.toUtf8()+password);
                 QSignalSpy writeSpy(&writeJob, &QKeychain::WritePasswordJob::finished);
@@ -65,6 +66,7 @@ private Q_SLOTS:
             for (const auto& username : usernames)
             {
                 QKeychain::ReadPasswordJob readJob(serviceKey);
+                readJob.setSecurityLevel(QKeychain::Job::Standard);
                 readJob.setKey(username);
                 QSignalSpy readSpy(&readJob, &QKeychain::ReadPasswordJob::finished);
                 readJob.start();
@@ -83,6 +85,7 @@ private Q_SLOTS:
             for (const auto& username : usernames)
             {
                 QKeychain::DeletePasswordJob deleteJob(serviceKey);
+                deleteJob.setSecurityLevel(QKeychain::Job::Standard);
                 deleteJob.setKey(username);
                 QSignalSpy deleteSpy(&deleteJob, &QKeychain::DeletePasswordJob::finished);
                 deleteJob.start();
