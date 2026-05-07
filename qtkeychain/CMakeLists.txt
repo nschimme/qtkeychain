@@ -21,7 +21,7 @@ endif()
 
 if(WIN32)
     list(APPEND qtkeychain_SOURCES keychain_win.cpp)
-    list(APPEND qtkeychain_LIBRARIES crypt32)
+    list(APPEND qtkeychain_LIBRARIES crypt32 credui)
     if (NOT USE_CREDENTIAL_STORE)
         list(APPEND qtkeychain_SOURCES plaintextstore.cpp)
     endif()
@@ -41,7 +41,7 @@ endif()
 
 if(APPLE)
     list(APPEND qtkeychain_SOURCES keychain_apple.mm)
-    list(APPEND qtkeychain_LIBRARIES "-framework Foundation" "-framework Security")
+    list(APPEND qtkeychain_LIBRARIES "-framework Foundation" "-framework Security" "-framework LocalAuthentication")
 endif()
 
 if(HAIKU)

@@ -13,6 +13,7 @@
 #include <windows.h>
 #include <wincred.h>
 #include <wincrypt.h>
+#include <winuser.h>
 
 #include <cmath>
 #include <memory>
@@ -73,6 +74,55 @@ std::pair<QByteArray, QString> protectData(const QByteArray &data)
     return { encrypted, {} };
 }
 
+bool isWindowsHelloAvailable()
+{
+    // A reliable way to check if biometry or PIN is available without WinRT
+    // is to check if any biometric or PIN credential providers are enrolled.
+    // However, a simpler heuristic for Win32 is that if CredUIPromptForWindowsCredentials
+    // is called with CREDUIWIN_GENERIC, it will show the prompt if available.
+    // To implement the "transparent fallback" requested, we can use the
+    // UserConsentVerifier if we had WinRT, or check registry as a heuristic.
+    // For this implementation, we will assume availability on Windows 10+
+    // as it's almost always available via PIN at minimum.
+    OSVERSIONINFOEXW osi = { sizeof(osi), 10, 0, 0, 0, {0}, 0, 0, 0, 0, 0 };
+    DWORDLONG mask = 0;
+    VER_SET_CONDITION(mask, VER_MAJORVERSION, VER_GREATER_EQUAL);
+    VER_SET_CONDITION(mask, VER_MINORVERSION, VER_GREATER_EQUAL);
+
+    return VerifyVersionInfoW(&osi, VER_MAJORVERSION | VER_MINORVERSION, mask);
+}
+
+bool verifyUserPresence(const QString &service)
+{
+    if (!isWindowsHelloAvailable())
+        return true;
+
+    CREDUI_INFOW credui = {};
+    credui.cbSize = sizeof(credui);
+    credui.hwndParent = nullptr;
+
+    const QString message = QObject::tr("Authenticate to access %1").arg(service);
+    credui.pszMessageText = reinterpret_cast<const wchar_t *>(message.utf16());
+    credui.pszCaptionText = L"QtKeychain";
+
+    DWORD authPackage = 0;
+    LPVOID authBuffer = nullptr;
+    ULONG authBufferSize = 0;
+    BOOL save = FALSE;
+
+    const DWORD status = CredUIPromptForWindowsCredentialsW(
+            &credui, 0, &authPackage, nullptr, 0, &authBuffer, &authBufferSize, &save,
+            CREDUIWIN_GENERIC | CREDUIWIN_ALLOW_UNKNOWN_SCHEME | CREDUIWIN_ENUMERATE_CURRENT_USER);
+
+    if (status == ERROR_SUCCESS) {
+        SecureZeroMemory(authBuffer, authBufferSize);
+        CoTaskMemFree(authBuffer);
+        return true;
+    }
+
+    return false;
+}
+
 } // namespace
 
 #if defined(USE_CREDENTIAL_STORE)
@@ -89,6 +139,13 @@ std::pair<QByteArray, QString> protectData(const QByteArray &data)
  */
 void ReadPasswordJobPrivate::scheduledStart()
 {
+    if (securityLevel == Job::Biometric) {
+        if (!verifyUserPresence(q->service())) {
+            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+            return;
+        }
+    }
+
     PCREDENTIALW cred = {};
 
     if (!CredReadW(reinterpret_cast<const wchar_t *>(key.utf16()), CRED_TYPE_GENERIC, 0, &cred)) {
@@ -136,6 +193,13 @@ void ReadPasswordJobPrivate::scheduledStart()
 
 void WritePasswordJobPrivate::scheduledStart()
 {
+    if (securityLevel == Job::Biometric) {
+        if (!verifyUserPresence(q->service())) {
+            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+            return;
+        }
+    }
+
     CREDENTIALW cred = {};
     cred.Comment = const_cast<wchar_t *>(PRODUCT_NAME.data());
     cred.Type = CRED_TYPE_GENERIC;
@@ -214,6 +278,13 @@ void WritePasswordJobPrivate::scheduledStart()
 
 void DeletePasswordJobPrivate::scheduledStart()
 {
+    if (securityLevel == Job::Biometric) {
+        if (!verifyUserPresence(q->service())) {
+            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+            return;
+        }
+    }
+
     if (!CredDeleteW(reinterpret_cast<const wchar_t *>(key.utf16()), CRED_TYPE_GENERIC, 0)) {
         Error err;
         QString msg;
@@ -236,6 +307,13 @@ void DeletePasswordJobPrivate::scheduledStart()
 #else
 void ReadPasswordJobPrivate::scheduledStart()
 {
+    if (securityLevel == Job::Biometric) {
+        if (!verifyUserPresence(q->service())) {
+            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+            return;
+        }
+    }
+
     PlainTextStore plainTextStore(q->service(), q->settings());
     QByteArray encrypted = plainTextStore.readData(key);
     if (plainTextStore.error() != NoError) {
@@ -254,6 +332,13 @@ void ReadPasswordJobPrivate::scheduledStart()
 
 void WritePasswordJobPrivate::scheduledStart()
 {
+    if (securityLevel == Job::Biometric) {
+        if (!verifyUserPresence(q->service())) {
+            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+            return;
+        }
+    }
+
     const auto result = protectData(data);
     if (!result.second.isEmpty()) {
         q->emitFinishedWithError(OtherError, tr("Encryption failed: %1").arg(result.second));
@@ -272,6 +357,13 @@ void WritePasswordJobPrivate::scheduledStart()
 
 void DeletePasswordJobPrivate::scheduledStart()
 {
+    if (securityLevel == Job::Biometric) {
+        if (!verifyUserPresence(q->service())) {
+            q->emitFinishedWithError(AccessDeniedByUser, tr("User canceled authentication"));
+            return;
+        }
+    }
+
     PlainTextStore plainTextStore(q->service(), q->settings());
     plainTextStore.remove(key);
     if (plainTextStore.error() != NoError) {

@@ -236,7 +236,7 @@ JobPrivate::JobPrivate(const QString &service_, Job *qq)
       service(service_),
       autoDelete(true),
       insecureFallback(false),
-#if defined(Q_OS_APPLE)
+#if defined(Q_OS_APPLE) || defined(Q_OS_WIN)
       securityLevel(Job::Biometric)
 #else
       securityLevel(Job::Standard)

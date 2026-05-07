@@ -10,7 +10,14 @@
 #include "keychain_p.h"
 
 #import <Foundation/Foundation.h>
+#import <LocalAuthentication/LocalAuthentication.h>
 #import <Security/Security.h>
+
+/*
+ * Note for Face ID support:
+ * To use Face ID, apps using this library must include the NSFaceIDUsageDescription
+ * key in their Info.plist file.
+ */
 
 using namespace QKeychain;
 
@@ -92,6 +99,7 @@ struct ErrorDescription
 @interface AppleKeychainInterface () {
     QPointer<Job> _job;
     QPointer<JobPrivate> _privateJob;
+    LAContext *_context;
 }
 @end
 
@@ -103,15 +111,37 @@ struct ErrorDescription
     if (self) {
         _job = job;
         _privateJob = privateJob;
+        _context = [[LAContext alloc] init];
     }
     return self;
 }
 
 - (void)dealloc
 {
+    [_context release];
     [NSNotificationCenter.defaultCenter removeObserver:self];
     [super dealloc];
 }
+
+- (LAContext *)context
+{
+    return _context;
+}
+
+- (QKeychain::Job::SecurityLevel)effectiveSecurityLevel
+{
+    if (!_job || _job->securityLevel() != QKeychain::Job::Biometric) {
+        return QKeychain::Job::Standard;
+    }
+
+    NSError *error = nil;
+    if ([_context canEvaluatePolicy:LAPolicyDeviceOwnerAuthentication error:&error]) {
+        return QKeychain::Job::Biometric;
+    }
+
+    return QKeychain::Job::Standard;
+}
+
 
 - (void)keychainTaskFinished
 {
@@ -153,9 +183,9 @@ struct ErrorDescription
 @end
 
 static void StartReadPassword(const QString &service, const QString &key,
-                              QKeychain::Job::SecurityLevel securityLevel,
                               AppleKeychainInterface *const interface)
 {
+    const auto securityLevel = [interface effectiveSecurityLevel];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
         NSMutableDictionary *const query = [NSMutableDictionary dictionaryWithDictionary:@{
             (__bridge NSString *)kSecClass : (__bridge NSString *)kSecClassGenericPassword,
@@ -167,6 +197,7 @@ static void StartReadPassword(const QString &service, const QString &key,
         if (securityLevel == QKeychain::Job::Biometric) {
             const auto prompt = Job::tr("Authenticate to access %1").arg(service);
             [query setObject:prompt.toNSString() forKey:(__bridge NSString *)kSecUseOperationPrompt];
+            [query setObject:[interface context] forKey:(__bridge NSString *)kSecUseAuthenticationContext];
         }
 
         CFTypeRef dataRef = nil;
@@ -196,15 +227,21 @@ static void StartReadPassword(const QString &service, const QString &key,
 }
 
 static void StartWritePassword(const QString &service, const QString &key, const QByteArray &data,
-                               QKeychain::Job::SecurityLevel securityLevel,
                                AppleKeychainInterface *const interface)
 {
+    const auto securityLevel = [interface effectiveSecurityLevel];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-        NSDictionary *const query = @{
+        NSMutableDictionary *const query = [NSMutableDictionary dictionaryWithDictionary:@{
             (__bridge NSString *)kSecClass : (__bridge NSString *)kSecClassGenericPassword,
             (__bridge NSString *)kSecAttrService : service.toNSString(),
             (__bridge NSString *)kSecAttrAccount : key.toNSString(),
-        };
+        }];
+
+        if (securityLevel == QKeychain::Job::Biometric) {
+            const auto prompt = Job::tr("Authenticate to access %1").arg(service);
+            [query setObject:prompt.toNSString() forKey:(__bridge NSString *)kSecUseOperationPrompt];
+            [query setObject:[interface context] forKey:(__bridge NSString *)kSecUseAuthenticationContext];
+        }
 
         CFErrorRef error = nil;
         SecAccessControlRef accessControl = nil;
@@ -215,7 +252,7 @@ static void StartWritePassword(const QString &service, const QString &key, const
                     kSecAccessControlUserPresence, &error);
         }
 
-        OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, nil);
+        OSStatus status = SecItemCopyMatching((__bridge const CFDictionaryRef)query, nil);
 
         if (status == errSecSuccess) {
             NSMutableDictionary *const update = [NSMutableDictionary dictionaryWithDictionary:@{
@@ -235,9 +272,9 @@ static void StartWritePassword(const QString &service, const QString &key, const
                            forKey:(__bridge NSString *)kSecAttrAccessControl];
             }
 
-            status = SecItemUpdate((__bridge CFDictionaryRef)query,
-                                   (__bridge CFDictionaryRef)update);
-        } else {
+            status = SecItemUpdate((__bridge const CFDictionaryRef)query,
+                                   (__bridge const CFDictionaryRef)update);
+        } else if (status == errSecItemNotFound) {
             NSMutableDictionary *const insert = [NSMutableDictionary dictionaryWithDictionary:@{
                 (__bridge NSString *)kSecClass : (__bridge NSString *)kSecClassGenericPassword,
                 (__bridge NSString *)kSecAttrService : service.toNSString(),
@@ -254,6 +291,21 @@ static void StartWritePassword(const QString &service, const QString &key, const
             }
 
             status = SecItemAdd((__bridge const CFDictionaryRef)insert, nil);
+        } else {
+            NSString *const descriptiveErrorString = @"Could not store data in settings";
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [interface keychainTaskFinishedWithError:status
+                                      descriptiveMessage:descriptiveErrorString];
+                [interface release];
+            });
+
+            if (accessControl) {
+                CFRelease(accessControl);
+            }
+            if (error) {
+                CFRelease(error);
+            }
+            return;
         }
 
         if (accessControl) {
@@ -283,14 +335,21 @@ static void StartWritePassword(const QString &service, const QString &key, const
 static void StartDeletePassword(const QString &service, const QString &key,
                                 AppleKeychainInterface *const interface)
 {
+    const auto securityLevel = [interface effectiveSecurityLevel];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-        NSDictionary *const query = @{
+        NSMutableDictionary *const query = [NSMutableDictionary dictionaryWithDictionary:@{
             (__bridge NSString *)kSecClass : (__bridge NSString *)kSecClassGenericPassword,
             (__bridge NSString *)kSecAttrService : service.toNSString(),
             (__bridge NSString *)kSecAttrAccount : key.toNSString(),
-        };
+        }];
 
-        const OSStatus status = SecItemDelete((__bridge CFDictionaryRef)query);
+        if (securityLevel == QKeychain::Job::Biometric) {
+            const auto prompt = Job::tr("Authenticate to access %1").arg(service);
+            [query setObject:prompt.toNSString() forKey:(__bridge NSString *)kSecUseOperationPrompt];
+            [query setObject:[interface context] forKey:(__bridge NSString *)kSecUseAuthenticationContext];
+        }
+
+        const OSStatus status = SecItemDelete((__bridge const CFDictionaryRef)query);
 
         if (status == errSecSuccess) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -312,14 +371,14 @@ void ReadPasswordJobPrivate::scheduledStart()
 {
     AppleKeychainInterface *const interface = [[AppleKeychainInterface alloc] initWithJob:q
                                                                             andPrivateJob:this];
-    StartReadPassword(service, key, securityLevel, interface);
+    StartReadPassword(service, key, interface);
 }
 
 void WritePasswordJobPrivate::scheduledStart()
 {
     AppleKeychainInterface *const interface = [[AppleKeychainInterface alloc] initWithJob:q
                                                                             andPrivateJob:this];
-    StartWritePassword(service, key, data, securityLevel, interface);
+    StartWritePassword(service, key, data, interface);
 }
 
 void DeletePasswordJobPrivate::scheduledStart()

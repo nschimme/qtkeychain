@@ -160,7 +160,7 @@ public:
 
     /**
      * Set the security level for the keychain item.
-     * On Apple platforms, this defaults to Biometric if the library is built with APPLE_LOCALAUTHENTICATION.
+     * On Apple and Windows platforms, this defaults to Biometric.
      * @see securityLevel()
      * @since 0.15
      */
