@@ -257,8 +257,6 @@ QString JobPrivate::modeToString(Mode m)
         return QLatin1String("Text");
     case Binary:
         return QLatin1String("Binary");
-    case Map:
-        return QLatin1String("Map");
     }
 
     Q_ASSERT_X(false, Q_FUNC_INFO, "Unhandled Mode value");
@@ -271,8 +269,6 @@ JobPrivate::Mode JobPrivate::stringToMode(const QString &s)
         return Text;
     if (s == QLatin1String("Binary") || s == QLatin1String("2"))
         return Binary;
-    if (s == QLatin1String("Map") || s == QLatin1String("3"))
-        return Map;
 
     qCritical("Unexpected mode string '%s'", qPrintable(s));
 
