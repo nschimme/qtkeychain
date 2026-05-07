@@ -265,6 +265,8 @@ JobPrivate::Mode JobPrivate::stringToMode(const QString &s)
         return Text;
     if (s == QLatin1String("Binary") || s == QLatin1String("2"))
         return Binary;
+    if (s == QLatin1String("Map") || s == QLatin1String("3"))
+        return Map;
 
     qCritical("Unexpected mode string '%s'", qPrintable(s));
 

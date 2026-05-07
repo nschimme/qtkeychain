@@ -12,22 +12,8 @@
 #include <comdef.h>
 #include <windows.h>
 #include <wincred.h>
-#include <credui.h>
 #include <wincrypt.h>
 #include <winuser.h>
-
-#ifndef CREDUIWIN_GENERIC
-#  define CREDUIWIN_GENERIC 0x00000001
-#endif
-#ifndef CREDUIWIN_ALLOW_UNKNOWN_SCHEME
-#  define CREDUIWIN_ALLOW_UNKNOWN_SCHEME 0x00000002
-#endif
-#ifndef CREDUIWIN_ENUMERATE_CURRENT_USER
-#  define CREDUIWIN_ENUMERATE_CURRENT_USER 0x00000200
-#endif
-#ifndef CREDUIWIN_CHECKBOX
-#  define CREDUIWIN_CHECKBOX 0x00000020
-#endif
 
 #include <cmath>
 #include <memory>
@@ -90,14 +76,7 @@ std::pair<QByteArray, QString> protectData(const QByteArray &data)
 
 bool isWindowsHelloAvailable()
 {
-    // A reliable way to check if biometry or PIN is available without WinRT
-    // is to check if any biometric or PIN credential providers are enrolled.
-    // However, a simpler heuristic for Win32 is that if CredUIPromptForWindowsCredentials
-    // is called with CREDUIWIN_GENERIC, it will show the prompt if available.
-    // To implement the "transparent fallback" requested, we can use the
-    // UserConsentVerifier if we had WinRT, or check registry as a heuristic.
-    // For this implementation, we will assume availability on Windows 10+
-    // as it's almost always available via PIN at minimum.
+    // Heuristic: check if Windows 10 or newer
     OSVERSIONINFOEXW osi = { sizeof(osi), 10, 0, 0, 0, {0}, 0, 0, 0, 0, 0 };
     DWORDLONG mask = 0;
     VER_SET_CONDITION(mask, VER_MAJORVERSION, VER_GREATER_EQUAL);
@@ -110,6 +89,33 @@ bool verifyUserPresence(const QString &service)
 {
     if (!isWindowsHelloAvailable())
         return true;
+
+    // Use dynamic loading to avoid build-time dependency on credui.h/credui.lib
+    typedef struct _CREDUI_INFOW {
+        DWORD cbSize;
+        HWND hwndParent;
+        LPCWSTR pszMessageText;
+        LPCWSTR pszCaptionText;
+        HBITMAP hbmBanner;
+    } CREDUI_INFOW, *PCREDUI_INFOW;
+
+    typedef DWORD (WINAPI *PFN_CredUIPromptForWindowsCredentialsW)(
+        PCREDUI_INFOW pUiInfo, DWORD dwAuthError, ULONG *pAuthPackage,
+        LPCVOID pvInAuthBuffer, ULONG ulInAuthBufferSize,
+        LPVOID *ppvOutAuthBuffer, ULONG *pulOutAuthBufferSize,
+        PBOOL pfSave, DWORD dwFlags);
+
+    HMODULE hCredUI = LoadLibraryW(L"credui.dll");
+    if (!hCredUI)
+        return true;
+
+    PFN_CredUIPromptForWindowsCredentialsW pPrompt =
+        (PFN_CredUIPromptForWindowsCredentialsW)GetProcAddress(hCredUI, "CredUIPromptForWindowsCredentialsW");
+
+    if (!pPrompt) {
+        FreeLibrary(hCredUI);
+        return true;
+    }
 
     CREDUI_INFOW credui = {};
     credui.cbSize = sizeof(credui);
@@ -124,17 +130,21 @@ bool verifyUserPresence(const QString &service)
     ULONG authBufferSize = 0;
     BOOL save = FALSE;
 
-    const DWORD status = CredUIPromptForWindowsCredentialsW(
+    // Flags: CREDUIWIN_GENERIC (0x1) | CREDUIWIN_ALLOW_UNKNOWN_SCHEME (0x2) | CREDUIWIN_ENUMERATE_CURRENT_USER (0x200)
+    const DWORD status = pPrompt(
             &credui, 0, &authPackage, nullptr, 0, &authBuffer, &authBufferSize, &save,
-            0x1 /* CREDUIWIN_GENERIC */ | 0x2 /* CREDUIWIN_ALLOW_UNKNOWN_SCHEME */
-                    | 0x200 /* CREDUIWIN_ENUMERATE_CURRENT_USER */);
+            0x1 | 0x2 | 0x200);
 
     if (status == ERROR_SUCCESS) {
-        SecureZeroMemory(authBuffer, authBufferSize);
-        CoTaskMemFree(authBuffer);
+        if (authBuffer) {
+            SecureZeroMemory(authBuffer, authBufferSize);
+            CoTaskMemFree(authBuffer);
+        }
+        FreeLibrary(hCredUI);
         return true;
     }
 
+    FreeLibrary(hCredUI);
     return false;
 }
 

@@ -214,7 +214,7 @@ static void StartReadPassword(const QString &service, const QString &key,
             });
         } else {
             NSString *const descriptiveErrorString =
-                    @"Could not retrieve private key from keystore";
+                    @"Could not retrieve password from keychain";
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainTaskFinishedWithError:status
                                       descriptiveMessage:descriptiveErrorString];
@@ -280,14 +280,13 @@ static void StartWritePassword(const QString &service, const QString &key, const
                 dispatch_async(dispatch_get_main_queue(), ^{
                     [interface keychainTaskFinished];
                 });
+            } else {
+                NSString *const descriptiveErrorString = @"Could not store data in settings";
 
-                if (accessControl) {
-                    CFRelease(accessControl);
-                }
-                if (error) {
-                    CFRelease(error);
-                }
-                return;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [interface keychainTaskFinishedWithError:status
+                                          descriptiveMessage:descriptiveErrorString];
+                });
             }
         } else if (status == errSecItemNotFound) {
             NSMutableDictionary *const insert = [NSMutableDictionary dictionaryWithDictionary:@{
@@ -306,29 +305,21 @@ static void StartWritePassword(const QString &service, const QString &key, const
             }
 
             status = SecItemAdd((__bridge const CFDictionaryRef)insert, nil);
+
+            if (status == errSecSuccess) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [interface keychainTaskFinished];
+                });
+            } else {
+                NSString *const descriptiveErrorString = @"Could not store data in settings";
+
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [interface keychainTaskFinishedWithError:status
+                                          descriptiveMessage:descriptiveErrorString];
+                });
+            }
         } else {
             NSString *const descriptiveErrorString = @"Could not store data in settings";
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [interface keychainTaskFinishedWithError:status
-                                      descriptiveMessage:descriptiveErrorString];
-            });
-
-            if (accessControl) {
-                CFRelease(accessControl);
-            }
-            if (error) {
-                CFRelease(error);
-            }
-            return;
-        }
-
-        if (status == errSecSuccess) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [interface keychainTaskFinished];
-            });
-        } else {
-            NSString *const descriptiveErrorString = @"Could not store data in settings";
-
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainTaskFinishedWithError:status
                                       descriptiveMessage:descriptiveErrorString];
@@ -368,7 +359,7 @@ static void StartDeletePassword(const QString &service, const QString &key,
                 [interface keychainTaskFinished];
             });
         } else {
-            NSString *const descriptiveErrorString = @"Could not remove private key from keystore";
+            NSString *const descriptiveErrorString = @"Could not remove password from keychain";
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainTaskFinishedWithError:status
                                       descriptiveMessage:descriptiveErrorString];
