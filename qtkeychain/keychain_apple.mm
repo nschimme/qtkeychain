@@ -148,6 +148,7 @@ struct ErrorDescription
     if (_job) {
         _job->emitFinished();
     }
+    [self release];
 }
 
 - (void)keychainReadTaskFinished:(NSData *)retrievedData
@@ -163,6 +164,7 @@ struct ErrorDescription
     if (_job) {
         _job->emitFinished();
     }
+    [self release];
 }
 
 - (void)keychainTaskFinishedWithError:(OSStatus)status
@@ -178,6 +180,7 @@ struct ErrorDescription
     if (_job) {
         _job->emitFinishedWithError(error.code, fullMessage);
     }
+    [self release];
 }
 
 @end
@@ -208,7 +211,6 @@ static void StartReadPassword(const QString &service, const QString &key,
             NSData *const data = (__bridge NSData *)castedDataRef;
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainReadTaskFinished:data];
-                [interface release];
             });
         } else {
             NSString *const descriptiveErrorString =
@@ -216,7 +218,6 @@ static void StartReadPassword(const QString &service, const QString &key,
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainTaskFinishedWithError:status
                                       descriptiveMessage:descriptiveErrorString];
-                [interface release];
             });
         }
 
@@ -274,6 +275,20 @@ static void StartWritePassword(const QString &service, const QString &key, const
 
             status = SecItemUpdate((__bridge const CFDictionaryRef)query,
                                    (__bridge const CFDictionaryRef)update);
+
+            if (status == errSecSuccess) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [interface keychainTaskFinished];
+                });
+
+                if (accessControl) {
+                    CFRelease(accessControl);
+                }
+                if (error) {
+                    CFRelease(error);
+                }
+                return;
+            }
         } else if (status == errSecItemNotFound) {
             NSMutableDictionary *const insert = [NSMutableDictionary dictionaryWithDictionary:@{
                 (__bridge NSString *)kSecClass : (__bridge NSString *)kSecClassGenericPassword,
@@ -296,7 +311,6 @@ static void StartWritePassword(const QString &service, const QString &key, const
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainTaskFinishedWithError:status
                                       descriptiveMessage:descriptiveErrorString];
-                [interface release];
             });
 
             if (accessControl) {
@@ -308,17 +322,9 @@ static void StartWritePassword(const QString &service, const QString &key, const
             return;
         }
 
-        if (accessControl) {
-            CFRelease(accessControl);
-        }
-        if (error) {
-            CFRelease(error);
-        }
-
         if (status == errSecSuccess) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainTaskFinished];
-                [interface release];
             });
         } else {
             NSString *const descriptiveErrorString = @"Could not store data in settings";
@@ -326,8 +332,14 @@ static void StartWritePassword(const QString &service, const QString &key, const
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainTaskFinishedWithError:status
                                       descriptiveMessage:descriptiveErrorString];
-                [interface release];
             });
+        }
+
+        if (accessControl) {
+            CFRelease(accessControl);
+        }
+        if (error) {
+            CFRelease(error);
         }
     });
 }
@@ -354,14 +366,12 @@ static void StartDeletePassword(const QString &service, const QString &key,
         if (status == errSecSuccess) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainTaskFinished];
-                [interface release];
             });
         } else {
             NSString *const descriptiveErrorString = @"Could not remove private key from keystore";
             dispatch_async(dispatch_get_main_queue(), ^{
                 [interface keychainTaskFinishedWithError:status
                                       descriptiveMessage:descriptiveErrorString];
-                [interface release];
             });
         }
     });

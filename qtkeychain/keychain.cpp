@@ -251,6 +251,8 @@ QString JobPrivate::modeToString(Mode m)
         return QLatin1String("Text");
     case Binary:
         return QLatin1String("Binary");
+    case Map:
+        return QLatin1String("Map");
     }
 
     Q_ASSERT_X(false, Q_FUNC_INFO, "Unhandled Mode value");

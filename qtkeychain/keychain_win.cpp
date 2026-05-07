@@ -12,8 +12,22 @@
 #include <comdef.h>
 #include <windows.h>
 #include <wincred.h>
+#include <credui.h>
 #include <wincrypt.h>
 #include <winuser.h>
+
+#ifndef CREDUIWIN_GENERIC
+#  define CREDUIWIN_GENERIC 0x00000001
+#endif
+#ifndef CREDUIWIN_ALLOW_UNKNOWN_SCHEME
+#  define CREDUIWIN_ALLOW_UNKNOWN_SCHEME 0x00000002
+#endif
+#ifndef CREDUIWIN_ENUMERATE_CURRENT_USER
+#  define CREDUIWIN_ENUMERATE_CURRENT_USER 0x00000200
+#endif
+#ifndef CREDUIWIN_CHECKBOX
+#  define CREDUIWIN_CHECKBOX 0x00000020
+#endif
 
 #include <cmath>
 #include <memory>
@@ -105,14 +119,15 @@ bool verifyUserPresence(const QString &service)
     credui.pszMessageText = reinterpret_cast<const wchar_t *>(message.utf16());
     credui.pszCaptionText = L"QtKeychain";
 
-    DWORD authPackage = 0;
+    ULONG authPackage = 0;
     LPVOID authBuffer = nullptr;
     ULONG authBufferSize = 0;
     BOOL save = FALSE;
 
     const DWORD status = CredUIPromptForWindowsCredentialsW(
             &credui, 0, &authPackage, nullptr, 0, &authBuffer, &authBufferSize, &save,
-            CREDUIWIN_GENERIC | CREDUIWIN_ALLOW_UNKNOWN_SCHEME | CREDUIWIN_ENUMERATE_CURRENT_USER);
+            0x1 /* CREDUIWIN_GENERIC */ | 0x2 /* CREDUIWIN_ALLOW_UNKNOWN_SCHEME */
+                    | 0x200 /* CREDUIWIN_ENUMERATE_CURRENT_USER */);
 
     if (status == ERROR_SUCCESS) {
         SecureZeroMemory(authBuffer, authBufferSize);
